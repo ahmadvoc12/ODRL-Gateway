@@ -1,0 +1,98 @@
+@prefix odrl: <http://www.w3.org/ns/odrl/2/> .
+@prefix dpv: <https://w3id.org/dpv#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex: <https://example.org/> .
+
+# ========================================
+# POLICY: Blood Type Access Limit
+# "Data blood type hanya boleh diakses maksimal 3x per aplikasi"
+# Sesuai paper: ODRL 2.2 standard
+# ========================================
+ex:policy-blood-type a odrl:Policy ;
+    odrl:uid <https://pod.example/policies/blood-type-policy> ;
+    dct:created "2026-02-13T09:00:00Z"^^xsd:dateTime ;
+    dct:creator ex:pod-owner ;
+    odrl:profile <https://w3id.org/dpv/odrl> ;
+    
+    # Target resource
+    odrl:target ex:blood-type ;
+    
+    # Permission: Read dengan constraint count ≤ 2
+    odrl:permission [
+        odrl:assigner ex:pod-owner ;
+        odrl:assignee ex:any-app ;  # Bisa diganti dengan specific app
+        odrl:action odrl:read ;
+        odrl:constraint [
+            odrl:leftOperand odrl:count ;
+            odrl:operator odrl:lteq ;
+            odrl:rightOperand "3"^^xsd:integer
+        ]
+    ] ;
+    
+    # Prohibition: Distribute tidak diizinkan
+    odrl:prohibition [
+        odrl:action odrl:distribute ;
+        odrl:assignee ex:any-app
+    ] .
+
+# ========================================
+# POLICY: Healthcare Purpose Only
+# "Akses hanya untuk tujuan medis"
+# ========================================
+ex:policy-healthcare-purpose a odrl:Policy ;
+    odrl:uid <https://pod.example/policies/healthcare-purpose> ;
+    dct:created "2026-02-13T09:00:00Z"^^xsd:dateTime ;
+    odrl:profile <https://w3id.org/dpv/odrl> ;
+    
+    odrl:target ex:health-records ;
+    
+    odrl:permission [
+        odrl:assigner ex:pod-owner ;
+        odrl:assignee ex:any-app ;
+        odrl:action odrl:read ;
+        odrl:constraint [
+            odrl:leftOperand odrl:purpose ;
+            odrl:operator odrl:eq ;
+            odrl:rightOperand dpv:HealthcarePurpose
+        ]
+    ] .
+
+# ========================================
+# POLICY: Spatial Constraint
+# "Akses hanya dari wilayah tertentu"
+# ========================================
+ex:policy-spatial a odrl:Policy ;
+    odrl:uid <https://pod.example/policies/spatial-constraint> ;
+    dct:created "2026-02-13T09:00:00Z"^^xsd:dateTime ;
+    odrl:profile <https://w3id.org/dpv/odrl> ;
+    
+    odrl:target ex:health-records ;
+    
+    odrl:permission [
+        odrl:assigner ex:pod-owner ;
+        odrl:assignee ex:any-app ;
+        odrl:action odrl:read ;
+        odrl:constraint [
+            odrl:leftOperand odrl:spatial ;
+            odrl:operator odrl:eq ;
+            odrl:rightOperand <https://www.iso.org/obp/ui/#iso:code:3166:ID>
+        ]
+    ] .
+
+# ========================================
+# ASSET DEFINITIONS
+# ========================================
+ex:blood-type a odrl:Asset ;
+    dct:title "Blood Type Data Field" ;
+    dct:description "Schema.org bloodType field containing sensitive health data" .
+
+ex:health-records a odrl:AssetCollection ;
+    dct:title "Health Records Collection" ;
+    dct:description "Collection of all health record resources in the pod" .
+
+ex:pod-owner a odrl:Party ;
+    dct:title "Pod Owner" .
+
+ex:any-app a odrl:Party ;
+    dct:title "Any Application" .

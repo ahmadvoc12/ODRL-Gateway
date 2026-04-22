@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Consent</title>
+
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2em; }
+    h1 { margin-bottom: .5em; }
+    .error { color: red; margin-bottom: 1em; }
+    dl { margin-left: 1em; }
+    dt { font-weight: bold; }
+    .checkbox, .radio { margin: .5em 0; }
+    .actions button { margin-right: .5em; }
+    .alternate { background: #f0f0f0; }
+    pre {
+      font-size: 13px;
+      background: #0b0b0b;
+      color: #00ff9c;
+      padding: 1em;
+      border-radius: 6px;
+      max-height: 300px;
+      overflow: auto;
+    }
+  </style>
+</head>
+
+<body>
+
+<h1>An application is requesting access</h1>
+<p class="error" id="error"></p>
+
+<dl id="clientInfo"></dl>
+
+<form id="mainForm">
+
+  <fieldset>
+    <legend>Choose your WebID</legend>
+    <ol id="webIdList"></ol>
+  </fieldset>
+
+  <fieldset>
+    <ol>
+      <li class="checkbox">
+        <label>
+          <input type="checkbox" checked disabled>
+          Remember this client
+        </label>
+      </li>
+
+      <li class="checkbox">
+        <label>
+          <input type="checkbox" id="monitorToggle">
+          Enable data access monitoring
+        </label>
+      </li>
+    </ol>
+  </fieldset>
+
+  <p class="actions">
+    <button id="authorize" type="submit" disabled>Authorize</button>
+    <button id="deny" type="button" class="alternate">Cancel</button>
+    <button id="switchAccount" type="button" class="alternate">
+      Switch account
+    </button>
+  </p>
+</form>
+
+<!-- ===== MODAL ===== -->
+
+<div id="agreementModal"
+  style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.5);
+         z-index:9999; align-items:center; justify-content:center;">
+
+  <div style="background:#fff; padding:2em; max-width:700px; width:100%; border-radius:8px;">
+    <h2>Data Access Agreement</h2>
+
+    <p><strong>Monitoring</strong>: <span id="monitorStatus"></span></p>
+
+    <details>
+      <summary>Consent Payload (for server)</summary>
+      <pre id="preview"></pre>
+    </details>
+
+    <div style="margin-top:1em; text-align:right;">
+      <button id="agreeCancel" class="alternate">Back</button>
+      <button id="agreeConfirm">I Agree & Continue</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= GLOBAL ================= */
+
+let oidcControls = null;
+let consentClient = null;
+let pendingAgreement = null;
+
+const qs = id => document.getElementById(id);
+const AUTO_ACL_ENDPOINT = "/_internal/auto-acl";
+
+/* ================= INIT ================= */
+
+(async () => {
+  oidcControls = await fetchControls('<%= idpIndex %>');
+
+  const { webIds } = await fetchJson(oidcControls.oidc.webId);
+  qs('authorize').disabled = false;
+
+  webIds.forEach((id, i) => {
+    qs('webIdList').insertAdjacentHTML(
+      "beforeend",
+      `<li class="radio">
+        <label>
+          <input type="radio" name="webId" value="${id}" ${i === 0 ? "checked" : ""}>
+          ${id}
+        </label>
+      </li>`
+    );
+  });
+
+  const consent = await fetchJson(oidcControls.oidc.consent);
+  consentClient = consent.client;
+
+  qs('clientInfo').innerHTML = `
+    <dt>Name</dt><dd>${consentClient.client_name}</dd>
+    <dt>Client ID</dt><dd>${consentClient.client_id}</dd>
+  `;
+
+  qs("mainForm").addEventListener("submit", handleAuthorize);
+})();
+
+/* ================= AUTHORIZE FLOW ================= */
+
+async function handleAuthorize(e) {
+  e.preventDefault();
+
+  const webId = new FormData(qs("mainForm")).get("webId");
+  if (!webId) {
+    qs("error").textContent = "Please select a WebID";
+    return;
+  }
+
+  const monitoring = qs("monitorToggle").checked;
+
+  const r = await postJson(oidcControls.oidc.webId, { webId });
+  const j = await r.json();
+  if (!r.ok) {
+    qs("error").textContent = j.message || "Failed to select WebID";
+    return;
+  }
+
+  await fetch(j.location);
+
+  pendingAgreement = {
+    userWebId: webId,
+    clientId: consentClient.client_id,
+    appWebId: `https://apps.example.com/${consentClient.client_id}/profile#me`,
+    permissions: ["Read", "Write"],
+    monitoring,
+    created: new Date().toISOString()
+  };
+
+  qs("monitorStatus").textContent = monitoring ? "Enabled" : "Disabled";
+  qs("preview").textContent = JSON.stringify(pendingAgreement, null, 2);
+
+  qs("agreementModal").style.display = "flex";
+}
+
+/* ================= MODAL ================= */
+
+qs("agreeCancel").onclick = () => {
+  qs("agreementModal").style.display = "none";
+};
+
+qs("agreeConfirm").onclick = async () => {
+  try {
+    sessionStorage.setItem(
+      "solidPendingConsent",
+      JSON.stringify(pendingAgreement)
+    );
+
+    // 🔑 trigger server ACL generation
+    await fetch(AUTO_ACL_ENDPOINT, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(pendingAgreement)
+    });
+
+    const r = await postJson(oidcControls.oidc.consent, { remember: true });
+    const j = await r.json();
+    location.href = j.location;
+
+  } catch (err) {
+    console.error(err);
+    qs("error").textContent = "Authorization failed";
+  }
+};
+
+/* ================= DENY & SWITCH ================= */
+
+qs("deny").onclick = async () => {
+  const r = await postJson(oidcControls.oidc.consent, {
+    remember: false,
+    consent: false
+  });
+  const j = await r.json();
+  location.href = j.location;
+};
+
+qs("switchAccount").onclick = () => {
+  if (oidcControls.oidc.logout) {
+    location.href = oidcControls.oidc.logout;
+  }
+};
+</script>
+
+</body>
+</html>

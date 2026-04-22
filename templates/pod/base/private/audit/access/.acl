@@ -1,0 +1,8 @@
+@prefix acl: <http://www.w3.org/ns/auth/acl#> .
+
+<#owner>
+  a acl:Authorization ;
+  acl:agentClass acl:AuthenticatedAgent ;
+  acl:mode acl:Read, acl:Write, acl:Append ;
+  acl:accessTo <./> ;
+  acl:default <./> .
