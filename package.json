@@ -1,6 +1,6 @@
 {
   "name": "odrl-gateway",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "ODRL-based policy enforcement layer for Solid projects with automatic injection via postinstall.",
   "main": "gateway.mjs",
   "type": "module",
@@ -28,11 +28,7 @@
 
   "repository": {
     "type": "git",
-    "url": "https://github.com/ahmadvoc12/ODRL-Gateway.git"
-  },
-
-  "bugs": {
-    "url": "https://github.com/ahmadvoc12/ODRL-Gateway/issues"
+    "url": "git+https://github.com/ahmadvoc12/ODRL-Gateway.git"
   },
 
   "homepage": "https://github.com/ahmadvoc12/ODRL-Gateway#readme",
@@ -40,8 +36,7 @@
   "files": [
     "gateway.mjs",
     "postinstall.js",
-    "templates/",
-    "odrl/"
+    "templates",
+    "odrl"
   ]
 }
-
