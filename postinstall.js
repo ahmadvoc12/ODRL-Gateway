@@ -1,21 +1,13 @@
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 
-const PACKAGE_NAME = "odrl-gateway";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const REPLACEMENTS = [
-  "templates",
-  "odrl",
-  "gateway.mjs"
-];
+const REPLACEMENTS = ["templates", "odrl", "gateway.mjs"];
 
 const projectRoot = process.cwd();
-
-const packageRoot = path.join(
-  projectRoot,
-  "node_modules",
-  PACKAGE_NAME
-);
+const packageRoot = __dirname;
 
 function log(msg) {
   console.log(`[ODRL-Gateway] ${msg}`);
@@ -32,12 +24,9 @@ function copy(src, dest) {
 }
 
 function run() {
-  log("Injecting ODRL-Gateway into current project...");
-
-  if (!fs.existsSync(packageRoot)) {
-    log("❌ Package not found in node_modules");
-    return;
-  }
+  log("POSTINSTALL TRIGGERED");
+  log(`projectRoot: ${projectRoot}`);
+  log(`packageRoot: ${packageRoot}`);
 
   REPLACEMENTS.forEach((item) => {
     const src = path.join(packageRoot, item);
@@ -49,7 +38,6 @@ function run() {
     }
 
     try {
- 
       if (fs.existsSync(dest)) {
         const backupPath = dest + ".backup";
         fs.rmSync(backupPath, { recursive: true, force: true });
@@ -66,7 +54,7 @@ function run() {
     }
   });
 
-  log("✅ ODRL-Gateway successfully installed into project");
+  log("✅ DONE");
 }
 
 run();
