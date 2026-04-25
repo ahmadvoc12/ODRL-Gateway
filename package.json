@@ -1,0 +1,48 @@
+```json
+{
+  "name": "odrl-gateway",
+  "version": "1.0.0",
+  "description": "ODRL-based policy enforcement layer for Solid projects with automatic injection via postinstall.",
+  "main": "gateway.mjs",
+  "type": "module",
+
+  "scripts": {
+    "postinstall": "node postinstall.js"
+  },
+
+  "keywords": [
+    "solid",
+    "odrl",
+    "policy",
+    "access-control",
+    "semantic-web",
+    "linked-data",
+    "gateway"
+  ],
+
+  "author": "Your Name",
+  "license": "MIT",
+
+  "engines": {
+    "node": ">=18.0.0"
+  },
+
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ahmadvoc12/ODRL-Gateway.git"
+  },
+
+  "bugs": {
+    "url": "https://github.com/ahmadvoc12/ODRL-Gateway/issues"
+  },
+
+  "homepage": "https://github.com/ahmadvoc12/ODRL-Gateway#readme",
+
+  "files": [
+    "gateway.mjs",
+    "postinstall.js",
+    "templates/",
+    "odrl/"
+  ]
+}
+```
