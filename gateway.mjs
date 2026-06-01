@@ -4,7 +4,7 @@ import path from "path";
 import { URL } from "url";
 import { spawn } from "child_process";
 
-// ODRL Components
+// ODRL Components (modular imports)
 import { ODRLPolicyEngine } from './odrl/policy-engine.mjs';
 import { EvaluationRequestBuilder } from './odrl/request-builder.mjs';
 import { StateOfTheWorldProvider } from './odrl/context-provider.mjs';
@@ -29,6 +29,87 @@ const POLICY_ACL_PATH = "private/audit/access/monitor-policy.ttl.acl";
 ✅ GLOBAL CACHE: Track active policy IRIs per pod
 ================================ */
 const activePolicyCache = new Map();
+
+/* ===============================
+✅ ACTION HIERARCHY & MAPPING (ODRL 2.2 Compliant)
+================================ */
+// Action hierarchy: all custom actions are includedIn top-level ODRL actions
+const ACTION_HIERARCHY = {
+  'ex:read': 'odrl:use',
+  'ex:create': 'odrl:use',
+  'ex:update': 'odrl:use',
+  'ex:delete': 'odrl:transfer', // optional
+  'odrl:use': null,
+  'odrl:transfer': null,
+};
+
+/**
+ * Check if actionA is transitively included in actionB per ODRL hierarchy
+ */
+function actionIncludedIn(actionA, actionB) {
+  if (!actionA || !actionB) return false;
+  let current = cleanIRI(actionA);
+  const target = cleanIRI(actionB);
+  
+  // Direct match
+  if (current === target) return true;
+  
+  // Traverse hierarchy transitively
+  while (current && ACTION_HIERARCHY[current]) {
+    const parent = cleanIRI(ACTION_HIERARCHY[current]);
+    if (parent === target) return true;
+    current = parent;
+  }
+  return false;
+}
+
+/**
+ * Map HTTP method + path pattern to ODRL action
+ */
+function httpMethodToOdrlAction(method, pathname = '', body = null) {
+  const m = (method || 'GET').toUpperCase();
+  
+  // POST typically = create (but check for update patterns)
+  if (m === 'POST') {
+    // Check if body contains update-like patterns (optional heuristic)
+    return 'ex:create';
+  }
+  
+  // PUT/PATCH = update
+  if (m === 'PUT' || m === 'PATCH') {
+    return 'ex:update';
+  }
+  
+  // DELETE = optional delete action
+  if (m === 'DELETE') {
+    return 'ex:delete';
+  }
+  
+  // Default GET = read
+  return 'ex:read';
+}
+
+/**
+ * Check if requested action is allowed by policy actions + prohibitions
+ */
+function isActionAllowed(requestedAction, policyActions = [], prohibitions = []) {
+  // 1. Check prohibition first (higher priority per ODRL)
+  for (const prohibited of prohibitions) {
+    if (actionIncludedIn(requestedAction, prohibited)) {
+      return { allowed: false, reason: 'Action prohibited by policy' };
+    }
+  }
+  
+  // 2. Check permission with hierarchy
+  const isPermitted = policyActions.some(pa => 
+    actionIncludedIn(requestedAction, pa)
+  );
+  
+  return {
+    allowed: isPermitted,
+    reason: isPermitted ? undefined : 'Action not permitted by policy'
+  };
+}
 
 /* ===============================
 SENSITIVE FIELD CONFIGURATION
@@ -121,7 +202,7 @@ ${cleanAlias} a <https://w3id.org/force/compliance-report#PolicyAlias> ;
 }
 
 /* ===============================
-✅ POLICY METADATA PARSER - Handle ALL policyActive formats
+✅ POLICY METADATA PARSER - Multi-Action Support
 ================================ */
 function parsePolicyMetadata(ttlContent) {
   try {
@@ -132,25 +213,31 @@ function parsePolicyMetadata(ttlContent) {
       description: null,
       target: null,
       active: true,
-      maxCount: 3
+      maxCount: 3,
+      actions: ['ex:read'], // ✅ Default action
+      constraintApplicableActions: null // ✅ Optional: constraint applies to specific actions only
     };
     
+    // Extract resource
     const resourceMatch = ttlContent.match(/(ex:policy-[^\s;]+)\s+a\s+odrl:Policy/);
     if (resourceMatch?.[1]) metadata.resource = cleanIRI(resourceMatch[1]);
     
+    // Extract identifier
     const idMatch = ttlContent.match(/dct:identifier\s+"(urn:uuid:[^"]+)"/);
     if (idMatch?.[1]) metadata.identifier = idMatch[1];
     
+    // Extract title & description
     const titleMatch = ttlContent.match(/dct:title\s+"([^"]+)"/);
     if (titleMatch?.[1]) metadata.title = titleMatch[1];
     
     const descMatch = ttlContent.match(/dct:description\s+"([^"]+)"/);
     if (descMatch?.[1]) metadata.description = descMatch[1];
     
+    // Extract target
     const targetMatch = ttlContent.match(/odrl:target\s+<([^>]+)>/);
     if (targetMatch?.[1]) metadata.target = cleanIRI(targetMatch[1]);
     
-    // ✅ Handle: "true"^^xsd:boolean, "false", false, true, with/without spaces
+    // ✅ Extract policyActive (handle multiple formats)
     const activeMatch = ttlContent.match(
       /<https:\/\/w3id\.org\/force\/compliance-report#policyActive\s*>?\s*("?[^"]+"?\^\^xsd:boolean|true|false)/i
     );
@@ -161,9 +248,39 @@ function parsePolicyMetadata(ttlContent) {
         .trim()
         .toLowerCase();
       metadata.active = val === 'true';
-      console.log(`🔍 Parsed policyActive: "${activeMatch[1].trim()}" → ${metadata.active}`);
     }
     
+    // ✅ Extract actions from odrl:action in permission blocks
+    const permissionBlocks = ttlContent.match(/odrl:permission\s+\[[^\]]+\]/gs) || [];
+    const actions = new Set();
+    
+    permissionBlocks.forEach(block => {
+      const actionMatches = block.match(/odrl:action\s+(odrl:[a-z]+|ex:[a-z-]+)/g) || [];
+      actionMatches.forEach(match => {
+        const action = match.split('odrl:action')[1]?.trim();
+        if (action && !action.includes('odrl:distribute')) {
+          actions.add(cleanIRI(action));
+        }
+      });
+    });
+    
+    // Default to read if no actions found (backward compatibility)
+    if (actions.size > 0) {
+      metadata.actions = Array.from(actions);
+    }
+    
+    // ✅ Extract constraint applicableActions if present
+    const applicableActionsMatch = ttlContent.match(
+      /<https:\/\/w3id\.org\/force\/compliance-report#applicableAction>\s+([^\s;]+)/g
+    );
+    if (applicableActionsMatch?.length > 0) {
+      metadata.constraintApplicableActions = applicableActionsMatch
+        .map(m => m.split('applicableAction>')[1]?.trim())
+        .map(a => cleanIRI(a))
+        .filter(Boolean);
+    }
+    
+    // Extract maxCount from constraint
     const countMatch = ttlContent.match(
       /odrl:leftOperand\s+odrl:count[\s\S]*?odrl:rightOperand\s+"?(\d+)"?\^\^xsd:integer/
     );
@@ -172,7 +289,7 @@ function parsePolicyMetadata(ttlContent) {
     return metadata;
   } catch (error) {
     console.error(`❌ Error parsing policy meta`, error.message);
-    return { active: true, maxCount: 3 };
+    return { active: true, maxCount: 3, actions: ['ex:read'] };
   }
 }
 
@@ -180,18 +297,24 @@ function parsePolicyMetadata(ttlContent) {
 REQUEST DEDUPLICATION
 ================================ */
 const requestCache = new Map();
-function shouldCountRequest(pod, app, field, timestamp) {
+function shouldCountRequest(pod, app, field, action, timestamp) {
   const normalizedField = normalizeField(field);
-  const key = `${pod}::${app}::${normalizedField}::${timestamp.substring(0, 19)}`;
+  const normalizedAction = cleanIRI(action);
+  const key = `${pod}::${app}::${normalizedField}::${normalizedAction}::${timestamp.substring(0, 19)}`;
+  
   if (requestCache.has(key)) {
-    console.log(`ℹ️ Skipping duplicate request: ${normalizedField}`);
+    console.log(`ℹ️ Skipping duplicate request: ${normalizedField} [${normalizedAction}]`);
     return false;
   }
+  
   requestCache.set(key, Date.now());
+  
+  // Clean old entries (>10s)
   const now = Date.now();
   for (const [k, time] of requestCache.entries()) {
     if (now - time > 10000) requestCache.delete(k);
   }
+  
   return true;
 }
 
@@ -212,24 +335,25 @@ const MONITOR_POLICIES_TTL = `@prefix odrl: <http://www.w3.org/ns/odrl/2/> .
 @prefix dct: <http://purl.org/dc/terms/> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix ex: <https://example.org/> .
+@prefix force: <https://w3id.org/force/compliance-report#> .
 
-# ===== POLICY 1: Blood Type Access =====
+# ===== POLICY 1: Blood Type - Read Only =====
 ex:policy-blood-type-4579e3c3af6546af9b28c6bf72890416 a odrl:Policy ;
     dct:identifier "urn:uuid:2c5c9cc0-c73e-4f78-8905-c08bd427866d" ;
-    dct:title "Blood Type Access Limit Policy" ;
+    dct:title "Blood Type Read Access Limit Policy" ;
     dct:description "Policy yang membatasi akses membaca bloodType maksimal 1 kali per sesi" ;
     dct:created "2026-02-13T09:00:00Z"^^xsd:dateTime ;
     dct:creator ex:pod-owner ;
     odrl:profile <https://w3id.org/dpv/odrl> ;
     odrl:target <https://schema.org/bloodType> ;
-    <https://w3id.org/force/compliance-report#policyActive> "true"^^xsd:boolean ;
+    force:policyActive "true"^^xsd:boolean ;
     odrl:permission _:b752_n3-abc1-permission ;
     odrl:prohibition _:b752_n3-abc1-prohibition .
 
 _:b752_n3-abc1-permission
     odrl:assigner ex:pod-owner ;
     odrl:assignee ex:any-app ;
-    odrl:action odrl:read ;
+    odrl:action ex:read ;
     odrl:constraint _:b752_n3-abc1-constraint .
 
 _:b752_n3-abc1-prohibition
@@ -241,23 +365,29 @@ _:b752_n3-abc1-constraint
     odrl:operator odrl:lteq ;
     odrl:rightOperand "1"^^xsd:integer .
 
-# ===== POLICY 2: Identity Access =====
+# ===== POLICY 2: Identity - Read + Update =====
 ex:policy-identity-92c9be5f4abc4654972a93ccbac0082e a odrl:Policy ;
     dct:identifier "urn:uuid:bd7077e5-990b-4c24-87cb-ce3bbc96fd32" ;
-    dct:title "Identity Access Limit Policy" ;
-    dct:description "Policy yang membatasi akses membaca identifier maksimal 3 kali per sesi" ;
+    dct:title "Identity Read/Update Access Limit Policy" ;
+    dct:description "Policy yang membatasi akses membaca dan mengupdate identifier maksimal 3 kali per sesi" ;
     dct:created "2026-02-13T09:00:00Z"^^xsd:dateTime ;
     dct:creator ex:pod-owner ;
     odrl:profile <https://w3id.org/dpv/odrl> ;
     odrl:target <https://schema.org/identifier> ;
-    <https://w3id.org/force/compliance-report#policyActive> "true"^^xsd:boolean ;
-    odrl:permission _:b752_n3-def2-permission ;
+    force:policyActive "true"^^xsd:boolean ;
+    odrl:permission _:b752_n3-def2-permission-read, _:b752_n3-def2-permission-update ;
     odrl:prohibition _:b752_n3-def2-prohibition .
 
-_:b752_n3-def2-permission
+_:b752_n3-def2-permission-read
     odrl:assigner ex:pod-owner ;
     odrl:assignee ex:any-app ;
-    odrl:action odrl:read ;
+    odrl:action ex:read ;
+    odrl:constraint _:b752_n3-def2-constraint .
+
+_:b752_n3-def2-permission-update
+    odrl:assigner ex:pod-owner ;
+    odrl:assignee ex:any-app ;
+    odrl:action ex:update ;
     odrl:constraint _:b752_n3-def2-constraint .
 
 _:b752_n3-def2-prohibition
@@ -267,7 +397,8 @@ _:b752_n3-def2-prohibition
 _:b752_n3-def2-constraint
     odrl:leftOperand odrl:count ;
     odrl:operator odrl:lteq ;
-    odrl:rightOperand "3"^^xsd:integer .
+    odrl:rightOperand "3"^^xsd:integer ;
+    force:applicableAction ex:read, ex:update .
 `;
 
 /* ===============================
@@ -460,6 +591,8 @@ async function loadPolicyFromPod(podBaseUrl, authToken) {
 async function loadPolicies(podName = null, authToken = null, forceRefresh = false) {
   const now = Date.now();
   const cached = activePolicyCache.get(podName);
+  
+  // Use cache if fresh (<5 min) and not forced refresh
   if (cached && !forceRefresh && (now - cached.lastSync < 5 * 60 * 1000)) {
     console.log(`♻️ Using cached policies for ${podName} (age: ${Math.round((now - cached.lastSync)/1000)}s)`);
     policyEngine.loadPolicies(cached.policies);
@@ -472,6 +605,7 @@ async function loadPolicies(podName = null, authToken = null, forceRefresh = fal
   if (podName) {
     const policyFile = path.join(DATA_ROOT, podName, POLICY_PATH);
     
+    // Try sync from remote if cache is stale or forced
     if ((forceRefresh || !cached || now - (cached?.lastSync || 0) > 5 * 60 * 1000) && authToken) {
       try {
         const podBaseUrl = buildPodBaseUrl(podName);
@@ -489,6 +623,7 @@ async function loadPolicies(podName = null, authToken = null, forceRefresh = fal
       }
     }
     
+    // Parse local policy file
     try {
       const content = await fs.readFile(policyFile, 'utf-8');
       const policyBlocks = content.split(/(?=ex:policy-[^:;]+ a odrl:Policy)/).filter(b => b.trim());
@@ -496,6 +631,8 @@ async function loadPolicies(podName = null, authToken = null, forceRefresh = fal
       
       for (const block of policyBlocks) {
         const metadata = parsePolicyMetadata(block);
+        
+        // Skip inactive policies entirely
         if (!metadata.active) {
           console.log(`⏭️ Policy INACTIVE (skipped from engine): ${metadata.title || metadata.target}`);
           continue;
@@ -508,22 +645,25 @@ async function loadPolicies(podName = null, authToken = null, forceRefresh = fal
           title: metadata.title || `${metadata.target} Policy`,
           targetIRI: metadata.target,
           active: metadata.active,
+          actions: metadata.actions, // ✅ Multi-action support
           permission: {
-            action: "odrl:read",
+            actions: metadata.actions, // ✅ Store actions array
             constraint: {
               leftOperand: "odrl:count",
               operator: "odrl:lteq",
-              rightOperand: metadata.maxCount
+              rightOperand: metadata.maxCount,
+              applicableActions: metadata.constraintApplicableActions // ✅ Action-specific constraint
             },
             targetAsset: metadata.target
           },
           prohibition: { action: "odrl:distribute" }
         };
         
+        // Track active IRIs for quick lookup
         if (metadata.targetIRI) activePolicyIRIs.add(cleanIRI(metadata.targetIRI));
         if (metadata.resource) activePolicyIRIs.add(cleanIRI(metadata.resource));
         
-        console.log(`✅ Loaded ACTIVE policy: ${metadata.title} (target: ${metadata.target}, max: ${metadata.maxCount})`);
+        console.log(`✅ Loaded ACTIVE policy: ${metadata.title} (target: ${metadata.target}, actions: ${metadata.actions.join(', ')}, max: ${metadata.maxCount})`);
       }
     } catch (err) {
       console.warn(`⚠️ Could not read policy file for ${podName}, using defaults`);
@@ -534,6 +674,7 @@ async function loadPolicies(podName = null, authToken = null, forceRefresh = fal
       });
     }
   } else {
+    // No pod specified: load defaults
     policies = getDefaultPolicies();
     Object.values(policies).forEach(p => {
       if (p.targetIRI) activePolicyIRIs.add(cleanIRI(p.targetIRI));
@@ -545,14 +686,17 @@ async function loadPolicies(podName = null, authToken = null, forceRefresh = fal
     console.log(`⚠️ No active policies found. All requests will be ALLOWED.`);
   }
   
+  // Update cache
   activePolicyCache.set(podName, {
     policies,
     activePolicyIRIs,
     lastSync: now
   });
   
+  // Load into engine
   policyEngine.loadPolicies(policies);
   console.log(`✅ ODRL Policies loaded: ${Object.keys(policies).length} active policies | Active IRIs: ${activePolicyIRIs.size}`);
+  
   return policies;
 }
 
@@ -561,15 +705,17 @@ function getDefaultPolicies() {
     bloodTypeAccess: {
       resource: "ex:policy-blood-type-default",
       identifier: "urn:uuid:2c5c9cc0-c73e-4f78-8905-c08bd427866d",
-      title: "Blood Type Access Limit Policy",
+      title: "Blood Type Read Access Limit Policy",
       targetIRI: "https://schema.org/bloodType",
       active: true,
+      actions: ['ex:read'], // ✅ Single action default
       permission: {
-        action: "odrl:read",
+        actions: ['ex:read'],
         constraint: {
           leftOperand: "odrl:count",
           operator: "odrl:lteq",
-          rightOperand: 1
+          rightOperand: 1,
+          applicableActions: ['ex:read'] // ✅ Constraint only for read
         },
         targetAsset: "https://schema.org/bloodType"
       },
@@ -578,15 +724,17 @@ function getDefaultPolicies() {
     identityAccess: {
       resource: "ex:policy-identity-default",
       identifier: "urn:uuid:bd7077e5-990b-4c24-87cb-ce3bbc96fd32",
-      title: "Identity Access Limit Policy",
+      title: "Identity Read/Update Access Limit Policy",
       targetIRI: "https://schema.org/identifier",
       active: true,
+      actions: ['ex:read', 'ex:update'], // ✅ Multi-action example
       permission: {
-        action: "odrl:read",
+        actions: ['ex:read', 'ex:update'],
         constraint: {
           leftOperand: "odrl:count",
           operator: "odrl:lteq",
-          rightOperand: 3
+          rightOperand: 3,
+          applicableActions: ['ex:read', 'ex:update'] // ✅ Constraint for both
         },
         targetAsset: "https://schema.org/identifier"
       },
@@ -783,12 +931,20 @@ ex:sotw-current a sotw:SotW ;
     sotw:count [
         a sotw:Count ;
         sotw:countValue "0"^^xsd:integer ;
-        odrl:target <https://schema.org/bloodType>
+        odrl:target <https://schema.org/bloodType> ;
+        sotw:actionType "ex:read"
     ] ;
     sotw:count [
         a sotw:Count ;
         sotw:countValue "0"^^xsd:integer ;
-        odrl:target <https://schema.org/identifier>
+        odrl:target <https://schema.org/identifier> ;
+        sotw:actionType "ex:read"
+    ] ;
+    sotw:count [
+        a sotw:Count ;
+        sotw:countValue "0"^^xsd:integer ;
+        odrl:target <https://schema.org/identifier> ;
+        sotw:actionType "ex:update"
     ] .
 `);
   }
@@ -796,9 +952,9 @@ ex:sotw-current a sotw:SotW ;
 }
 
 /* ===============================
-✅ UPDATE SOTW - Hanya update jika ada perubahan data
+✅ UPDATE SOTW - Per Action Type
 ================================ */
-async function updateSotW(pod, app, field, countData = null, decision = "ALLOWED") {
+async function updateSotW(pod, app, field, countData = null, decision = "ALLOWED", requestedAction = 'ex:read') {
   const sotwFile = await ensureSotWFile(pod);
   let content = await fs.readFile(sotwFile, 'utf-8');
   const now = new Date().toISOString();
@@ -806,18 +962,18 @@ async function updateSotW(pod, app, field, countData = null, decision = "ALLOWED
   
   if (countData && field) {
     const cleanFieldIRI = cleanIRI(field);
-    // Escape special regex characters in IRI
+    const cleanAction = cleanIRI(requestedAction);
     const escapedIRI = cleanFieldIRI.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     
-    // Regex untuk mencari count yang sudah ada untuk field ini
+    // Regex untuk mencari count dengan field + action type match
     const countRegex = new RegExp(
-      `(odrl:target\\s+${escapedIRI}\\s*;\\s*sotw:countValue\\s+")[^"]+("^^xsd:integer)`,
+      `(odrl:target\\s+${escapedIRI}\\s*;\\s*sotw:actionType\\s+"${cleanAction}"\\s*;\\s*sotw:countValue\\s+")[^"]+("^^xsd:integer)`,
       'g'
     );
     
     const match = content.match(countRegex);
     if (match) {
-      // Field sudah ada, cek apakah nilai count berubah
+      // Field+action sudah ada, cek apakah nilai count berubah
       const currentCountMatch = match[0].match(/sotw:countValue\s+"(\d+)"/);
       const currentCount = currentCountMatch?.[1];
       
@@ -825,20 +981,21 @@ async function updateSotW(pod, app, field, countData = null, decision = "ALLOWED
         // Count berubah, update nilai
         content = content.replace(countRegex, `$1${countData.count}$2`);
         hasChanges = true;
-        console.log(`📊 SotW count updated: ${cleanFieldIRI} ${currentCount} → ${countData.count}`);
+        console.log(`📊 SotW count updated: ${cleanFieldIRI} [${cleanAction}] ${currentCount} → ${countData.count}`);
       }
-      // Jika count sama, tidak perlu update apa pun
+      // Jika count sama, tidak perlu update
     } else {
-      // Field baru, tambahkan block count baru
+      // Field+action baru, tambahkan block count baru
       const countBlock = `
 ex:sotw-current sotw:count [
     a sotw:Count ;
     sotw:countValue "${countData.count}"^^xsd:integer ;
-    odrl:target ${cleanFieldIRI}
+    odrl:target ${cleanFieldIRI} ;
+    sotw:actionType "${cleanAction}"
 ] .`;
       content += countBlock;
       hasChanges = true;
-      console.log(`🆕 SotW new field added: ${cleanFieldIRI}`);
+      console.log(`🆕 SotW new field+action added: ${cleanFieldIRI} [${cleanAction}]`);
     }
   }
   
@@ -850,19 +1007,20 @@ ex:sotw-current sotw:count [
       `$1${now}$2`
     );
     await fs.writeFile(sotwFile, content);
-    console.log(`🌍 SotW updated (${decision}): ${field || 'none'} | Count: ${countData?.count || 'N/A'}`);
+    console.log(`🌍 SotW updated (${decision}): ${field || 'none'} [${requestedAction}] | Count: ${countData?.count || 'N/A'}`);
   } else {
-    console.log(`ℹ️ SotW unchanged (${decision}): ${field || 'none'} - no data changes`);
+    console.log(`ℹ️ SotW unchanged (${decision}): ${field || 'none'} [${requestedAction}] - no data changes`);
   }
 }
 
 /* ===============================
-✅✅✅ WRITE ACCESS LOG - FIX: Skip ALL logging if policy inactive
+✅ WRITE ACCESS LOG - Include Action Type
 ================================ */
 async function writeAccessLog({ pod, evalRequest, decision, sensitiveFields,
   violationType = null, personalData = null, method = "GET", resource = "",
-  policyMetadata = null }) {
+  policyMetadata = null, requestedAction = 'ex:read' }) { // ✅ New param
   
+  // Skip logging if no sensitive fields AND decision is permitted
   if (sensitiveFields.length === 0 && decision.permitted) return;
   
   const logFile = await ensureAccessLogFile(pod);
@@ -871,19 +1029,19 @@ async function writeAccessLog({ pod, evalRequest, decision, sensitiveFields,
   const app = evalRequest?.appName || resource.split('/').filter(Boolean)[2] || "unknown";
   const decisionStr = decision.permitted ? "ALLOWED" : "VIOLATION";
   
+  // ROOT: Access Record
   let ttl = `# ===== ROOT: Access Record ${accessId} =====
 ex:${accessId} a prov:Activity ;
     prov:startedAtTime "${timestamp}"^^xsd:dateTime ;
     prov:wasAssociatedWith ex:${app} ;
     <https://w3id.org/force/compliance-report#decision> "${decisionStr}" ;
     <https://w3id.org/force/compliance-report#accessMethod> "${method}" ;
+    <https://w3id.org/force/compliance-report#requestedAction> "${cleanIRI(requestedAction)}" ;
     <https://w3id.org/force/compliance-report#accessedResource> <${resource}> .
 ex:access-log prov:hadMember ex:${accessId} .
 `;
 
-  // ─────────────────────────────────────────
-  // 📦 SUBGRAPH: Personal Data Handling
-  // ─────────────────────────────────────────
+  // SUBGRAPH: Personal Data Handling (if sensitive)
   if (personalData && personalData.sensitive) {
     const handlingBundleId = `handling-bundle-${Date.now()}`;
     ttl += `# ===== SUBGRAPH: Personal Data Handling =====
@@ -900,9 +1058,7 @@ ex:${accessId} <https://w3id.org/force/compliance-report#hasPersonalDataHandling
 `;
   }
 
-  // ─────────────────────────────────────────
-  // 📦 SUBGRAPH: Accessed Fields Bundle
-  // ─────────────────────────────────────────
+  // SUBGRAPH: Accessed Fields Bundle
   const fieldsBundleId = `fields-bundle-${Date.now()}`;
   ttl += `# ===== SUBGRAPH: Accessed Fields Collection =====
 ex:${fieldsBundleId} a prov:Bundle ;
@@ -941,10 +1097,7 @@ ex:${fieldsBundleId} prov:hadMember ex:${fieldId} .
     });
   }
 
-  // ─────────────────────────────────────────
-  // 📦 SUBGRAPH: Policy Evaluation Context
-  // ✅ FIX: Collect evaluations FIRST, write bundle ONLY if there are valid ones
-  // ─────────────────────────────────────────
+  // SUBGRAPH: Policy Evaluation Context
   const policyBundleId = `policy-bundle-${Date.now()}`;
   const evaluatedPolicies = [];
   const cached = activePolicyCache.get(pod);
@@ -956,13 +1109,13 @@ ex:${fieldsBundleId} prov:hadMember ex:${fieldId} .
       const policyKey = fieldConfig.protectedByPolicy;
       const policy = policyEngine.getPolicy?.(policyKey);
       
-      // ✅ SKIP if policy not in engine OR not active
+      // SKIP if policy not in engine OR not active
       if (!policy || !policy.active) {
         console.log(`⏭️ Skipping policy eval logging: Policy ${policyKey} not active or not in engine`);
         continue;
       }
       
-      // ✅ SKIP if target IRI not in activePolicyIRIs cache
+      // SKIP if target IRI not in activePolicyIRIs cache
       const targetIRI = cleanIRI(fieldConfig.asset);
       if (!activePolicyIRIs.has(targetIRI) && !activePolicyIRIs.has(cleanIRI(policy.resource || ''))) {
         console.log(`⏭️ Skipping policy eval logging: ${targetIRI} not in activePolicyIRIs cache`);
@@ -1002,7 +1155,7 @@ ex:${policyBundleId} prov:hadMember ex:${policyEvalId} .
     }
   }
   
-  // ✅ ONLY write policy bundle header if there are evaluations
+  // ONLY write policy bundle header if there are evaluations
   if (evaluatedPolicies.length > 0) {
     ttl = `# ===== SUBGRAPH: Policy Evaluation Context =====
 ex:${policyBundleId} a prov:Bundle ;
@@ -1012,30 +1165,26 @@ ex:${accessId} <https://w3id.org/force/compliance-report#hasPolicyBundle> ex:${p
 ` + ttl;
   }
 
-  // ─────────────────────────────────────────
-  // 📦 SUBGRAPH: Violation Details
-  // ✅ FIX: COLLECT violations FIRST, write bundle ONLY if there are valid ones
-  // ✅ FIX: Check policyActive from TTL before logging violation
-  // ─────────────────────────────────────────
-  const violationEntries = []; // Collect valid violations first
+  // SUBGRAPH: Violation Details
+  const violationEntries = [];
   
   if (!decision.permitted && violationType) {
     for (const field of sensitiveFields) {
       const fieldConfig = getFieldConfig(field);
       if (fieldConfig) {
         const cleanFieldIRI = cleanIRI(field);
-        const countData = accessCounter.get(pod, app, cleanFieldIRI) || { count: 0 };
+        const countData = accessCounter.get(pod, app, cleanFieldIRI, requestedAction) || { count: 0 };
         const observedCount = countData.count;
         const policy = policyEngine.getPolicy?.(fieldConfig.protectedByPolicy);
         const limit = policy?.permission?.constraint?.rightOperand || 3;
         
-        // ✅ SKIP if policy not in engine OR not active (cached check)
+        // SKIP if policy not in engine OR not active (cached check)
         if (!policy || !policy.active) {
           console.log(`⏭️ Skipping violation logging: Policy ${fieldConfig.protectedByPolicy} not active (cached)`);
           continue;
         }
         
-        // ✅ DOUBLE-CHECK: Read TTL to confirm policyActive = true
+        // DOUBLE-CHECK: Read TTL to confirm policyActive = true
         const policyResource = policy.resource || `ex:policy-${fieldConfig.protectedByPolicy}`;
         const isActiveInTTL = await isPolicyActiveInTTL(pod, policyResource);
         if (!isActiveInTTL) {
@@ -1043,7 +1192,7 @@ ex:${accessId} <https://w3id.org/force/compliance-report#hasPolicyBundle> ex:${p
           continue;
         }
         
-        // ✅ SKIP if field IRI not in activePolicyIRIs cache
+        // SKIP if field IRI not in activePolicyIRIs cache
         if (!activePolicyIRIs.has(cleanFieldIRI) && !activePolicyIRIs.has(cleanIRI(policyResource))) {
           console.log(`⏭️ Skipping violation logging: ${cleanFieldIRI} not in activePolicyIRIs cache`);
           continue;
@@ -1057,14 +1206,15 @@ ex:${accessId} <https://w3id.org/force/compliance-report#hasPolicyBundle> ex:${p
             observedCount,
             limit,
             policyTitle: policy?.title || fieldConfig.protectedByPolicy,
-            assetLabel: fieldConfig.assetLabel
+            assetLabel: fieldConfig.assetLabel,
+            actionType: requestedAction
           });
         }
       }
     }
   }
   
-  // ✅ ONLY write violation bundle if there are valid violations
+  // ONLY write violation bundle if there are valid violations
   if (violationEntries.length > 0) {
     const violationBundleId = `violation-bundle-${Date.now()}`;
     const violationId = `violation-${Date.now()}`;
@@ -1091,29 +1241,30 @@ ex:${fieldViolationId} a <https://w3id.org/force/compliance-report#FieldViolatio
     <https://w3id.org/force/compliance-report#violatedField> ${entry.fieldIRI} ;
     <https://w3id.org/force/compliance-report#violatedPolicy> ${cleanPolicyAlias} ;
     <https://w3id.org/force/compliance-report#observedCount> "${entry.observedCount}"^^xsd:integer ;
-    <https://w3id.org/force/compliance-report#allowedLimit> "${entry.limit}"^^xsd:integer .
+    <https://w3id.org/force/compliance-report#allowedLimit> "${entry.limit}"^^xsd:integer ;
+    <https://w3id.org/force/compliance-report#actionType> "${cleanIRI(entry.actionType)}" .
 `;
     });
   }
   
   await fs.appendFile(logFile, ttl);
   
-  // ✅ Console logging
+  // Console logging
   const status = decision.permitted ? "✅ ACCESS ALLOWED" : "⚠️ POLICY VIOLATION";
   const fields = sensitiveFields.length > 0 ? sensitiveFields.join(', ') : 'none';
   
   if (!decision.permitted && violationType && violationEntries.length > 0) {
     const violationDetails = violationEntries.map(v =>
-      `${v.policyTitle} (${v.assetLabel}: ${v.observedCount} > ${v.limit})`
+      `${v.policyTitle} (${v.assetLabel} [${v.actionType}]: ${v.observedCount} > ${v.limit})`
     );
-    console.log(`${status} | App: ${app} | Fields: ${fields} | VIOLATED: ${violationDetails.join(', ')}`);
+    console.log(`${status} | App: ${app} | Action: ${requestedAction} | Fields: ${fields} | VIOLATED: ${violationDetails.join(', ')}`);
   } else if (!decision.permitted && violationType) {
-    console.log(`${status} | App: ${app} | Fields: ${fields} | Reason: ${decision.reason} (no active policy violations)`);
+    console.log(`${status} | App: ${app} | Action: ${requestedAction} | Fields: ${fields} | Reason: ${decision.reason} (no active policy violations)`);
   } else {
     const policyRef = evaluatedPolicies.length > 0
       ? `| Policies: ${evaluatedPolicies.filter(p => p.active).map(p => p.title).join(', ')}`
       : '';
-    console.log(`${status} | App: ${app} | Fields: ${fields} ${policyRef} | Reason: ${decision.reason}`);
+    console.log(`${status} | App: ${app} | Action: ${requestedAction} | Fields: ${fields} ${policyRef} | Reason: ${decision.reason}`);
   }
   
   if (personalData) {
@@ -1129,7 +1280,6 @@ async function isPolicyActiveInTTL(pod, policyResource) {
     const policyFile = path.join(DATA_ROOT, pod, POLICY_PATH);
     const ttlContent = await fs.readFile(policyFile, 'utf-8');
     
-    // Cari block policy untuk resource ini
     const cleanResource = cleanIRI(policyResource);
     const policyBlockRegex = new RegExp(
       `(${cleanResource}\\s+a\\s+odrl:Policy[\\s\\S]*?)(?=ex:policy-|@prefix|$)`,
@@ -1139,7 +1289,6 @@ async function isPolicyActiveInTTL(pod, policyResource) {
     
     if (blockMatch?.[1]) {
       const block = blockMatch[1];
-      // Cek predicate policyActive dengan berbagai format
       const activeMatch = block.match(
         /<https:\/\/w3id\.org\/force\/compliance-report#policyActive\s*>?\s*("?[^"]+"?\^\^xsd:boolean|true|false)/i
       );
@@ -1154,47 +1303,51 @@ async function isPolicyActiveInTTL(pod, policyResource) {
         return isActive;
       }
     }
-    // Default ke true jika predicate tidak ditemukan
     console.log(`⚠️ policyActive not found for ${cleanResource}, defaulting to true`);
     return true;
   } catch (error) {
     console.warn(`⚠️ Could not check policy active status for ${policyResource}: ${error.message}`);
-    return true; // Default allow logging jika check gagal
+    return true;
   }
 }
 
 /* ===============================
-✅ BUILD SOTW WITH COUNT (Multi-Field)
+✅ BUILD SOTW WITH COUNT (Multi-Field, Multi-Action)
 ================================ */
-async function buildSotWWithCount(pod, evalRequest, pathname, sensitiveFields) {
+async function buildSotWWithCount(pod, evalRequest, pathname, sensitiveFields, requestedAction = 'ex:read') {
   const sotw = await sotwProvider.build(pod, evalRequest, pathname, sensitiveFields);
   const app = extractAppName(pathname);
   const countState = {};
+  
   for (const field of sensitiveFields) {
     const normalizedField = normalizeField(field);
-    const countData = accessCounter.get(pod, app, normalizedField) || { count: 0 };
-    countState[normalizedField] = countData;
+    // ✅ Get count per action type
+    const countData = accessCounter.get(pod, app, normalizedField, requestedAction) || { count: 0 };
+    countState[normalizedField] = {
+      ...countData,
+      actionType: requestedAction
+    };
   }
   sotw.count = countState;
   return sotw;
 }
 
 /* ===============================
-🔥 INCREMENT COUNT BEFORE EVALUATION
+🔥 INCREMENT COUNT BEFORE EVALUATION (Per Action Type)
 ================================ */
-async function incrementAndEvaluate(pod, app, sensitiveFields, evalRequest, pathname) {
+async function incrementAndEvaluate(pod, app, sensitiveFields, evalRequest, pathname, requestedAction = 'ex:read') {
   for (const fld of sensitiveFields) {
     const normalizedField = normalizeField(fld);
     if (isSensitiveField(normalizedField)) {
       const now = new Date().toISOString();
-      if (shouldCountRequest(pod, app, normalizedField, now)) {
-        await sotwProvider.incrementAccessCount(pod, app, normalizedField);
-        console.log(`📈 Count incremented: ${normalizedField}`);
+      if (shouldCountRequest(pod, app, normalizedField, requestedAction, now)) {
+        await sotwProvider.incrementAccessCount(pod, app, normalizedField, requestedAction);
+        console.log(`📈 Count incremented: ${normalizedField} [${requestedAction}]`);
       }
     }
   }
-  const sotw = await buildSotWWithCount(pod, evalRequest, pathname, sensitiveFields);
-  return policyEngine.evaluate(evalRequest, sotw, sensitiveFields);
+  const sotw = await buildSotWWithCount(pod, evalRequest, pathname, sensitiveFields, requestedAction);
+  return policyEngine.evaluate(evalRequest, sotw, sensitiveFields, requestedAction);
 }
 
 /* ===============================
@@ -1203,6 +1356,7 @@ GATEWAY SERVER (MONITORING MODE)
 http.createServer(async (req, res) => {
   const { method, url, headers } = req;
   
+  // Health check
   if (method === "GET" && (url === "/" || url === "/health")) {
     res.writeHead(200, { "Content-Type": "text/plain" });
     return res.end("OK");
@@ -1211,13 +1365,16 @@ http.createServer(async (req, res) => {
   const target = new URL(url, GATEWAY_BASE);
   const pod = detectPod(target.pathname);
   
+  // Collect request body for POST/PUT/PATCH
   let body = "";
-  for await (const c of req) body += c;
+  for await (const chunk of req) body += chunk;
   
+  // Deploy policy if authenticated + valid pod
   if (isAuthenticated(headers) && pod && isValidPodName(pod)) {
     await ensurePolicyDeployed(pod, headers.authorization);
   }
   
+  // Proxy request to CSS backend
   const proxy = http.request({
     hostname: "127.0.0.1",
     port: CSS_PORT,
@@ -1226,40 +1383,52 @@ http.createServer(async (req, res) => {
     headers: { ...headers }
   }, async pres => {
     let resp = "";
-    for await (const c of pres) resp += c;
+    for await (const chunk of pres) resp += chunk;
     
+    // ✅ ODRL Evaluation for GET requests with sensitive data
     if (method === "GET" && isAuthenticated(headers) && !isSystem(target.pathname)) {
       try {
         const sensitiveFields = extractSensitiveFields(resp);
+        
         if (sensitiveFields.length > 0) {
-          const evalRequest = requestBuilder.buildFromHttpRequest(req, target.pathname, pod);
+          const evalRequest = requestBuilder.buildFromHttpRequest(req, target.pathname, pod, body);
           const app = extractAppName(target.pathname);
           
+          // ✅ Extract requested action from HTTP method
+          const requestedAction = httpMethodToOdrlAction(method, target.pathname, body);
+          
+          // ✅ Increment count per action type BEFORE evaluation
           for (const fld of sensitiveFields) {
             if (isSensitiveField(fld)) {
               const normalizedField = normalizeField(fld);
               const now = new Date().toISOString();
-              if (shouldCountRequest(pod, app, normalizedField, now)) {
-                await sotwProvider.incrementAccessCount(pod, app, normalizedField);
-                console.log(`📈 Count incremented: ${normalizedField}`);
+              if (shouldCountRequest(pod, app, normalizedField, requestedAction, now)) {
+                await accessCounter.increment(pod, app, normalizedField, requestedAction);
+                console.log(`📈 Count incremented: ${normalizedField} [${requestedAction}]`);
               }
             }
           }
           
-          const sotw = await buildSotWWithCount(pod, evalRequest, target.pathname, sensitiveFields);
-          const decisionResult = policyEngine.evaluate(evalRequest, sotw, sensitiveFields);
+          // ✅ Build SotW with action type
+          const sotw = await buildSotWWithCount(pod, evalRequest, target.pathname, sensitiveFields, requestedAction);
+          
+          // ✅ Evaluate with action-aware logic
+          const decisionResult = policyEngine.evaluate(evalRequest, sotw, sensitiveFields, requestedAction);
           const personalData = extractPersonalData(resp);
           
+          // ✅ Update SotW per field with action type
           for (const field of sensitiveFields) {
             const cleanFieldIRI = cleanIRI(field);
-            const countData = accessCounter.get(pod, app, cleanFieldIRI) || { count: 0 };
-            await updateSotW(pod, app, cleanFieldIRI, countData, decisionResult.permitted ? "ALLOWED" : "VIOLATION");
+            const countData = accessCounter.get(pod, app, cleanFieldIRI, requestedAction) || { count: 0 };
+            await updateSotW(pod, app, cleanFieldIRI, countData, decisionResult.permitted ? "ALLOWED" : "VIOLATION", requestedAction);
           }
           
+          // ✅ Write log with action type
           await writeAccessLog({
             pod, evalRequest, decision: decisionResult, sensitiveFields,
-            violationType: decisionResult.violatedConstraints[0]?.violationType,
-            personalData, method, resource: `${GATEWAY_BASE}${target.pathname}`
+            violationType: decisionResult.violatedConstraints?.[0]?.violationType,
+            personalData, method, resource: `${GATEWAY_BASE}${target.pathname}`,
+            requestedAction
           });
           
           if (!decisionResult.permitted) {
@@ -1271,6 +1440,7 @@ http.createServer(async (req, res) => {
       }
     }
     
+    // Forward response to client
     res.writeHead(pres.statusCode, pres.headers);
     res.end(resp);
   });
@@ -1292,22 +1462,28 @@ http.createServer(async (req, res) => {
   console.log('✅ Access counter reset - Count starts from 0');
   console.log(`✅ Solid Gateway with ODRL (MONITORING MODE) @ ${GATEWAY_BASE}`);
   console.log('🔄 Policy Syncing: Local cache enabled (sync every 5 min)');
-  console.log('📊 Multi-Policy Support: bloodType (limit=1), identity (limit=3)');
+  console.log('📊 Multi-Policy Support: bloodType (read, limit=1), identity (read+update, limit=3)');
   console.log('🔐 Policy as RDF Resource: ex:policy-xxx + dct:identifier + dct:title');
   console.log('🔗 Fully Semantic Links: report:evaluatedPolicy → resource');
   console.log('🗝️ Policy Alias Mapping: alias → resource → UUID');
   console.log('📝 Research-Grade RDF: Prefix once, targetAsset as full IRI, violatedPolicy consistent with FieldViolation');
-  console.log('🌍 State of the World: currentTime, count, location (sesuai paper sibb.pdf)');
+  console.log('🌍 State of the World: currentTime, count+actionType, location (sesuai paper)');
   console.log(`💾 Access Counter: ${accessCounter.getStats().totalEntries} entries`);
   console.log('');
   console.log('🎯 Test Sequence:');
-  console.log('   1x bloodType → ALLOWED (count=1, limit=1) + SotW updated');
-  console.log('   2x bloodType → VIOLATION ✅ (count=2 > limit=1) + SotW updated');
-  console.log('   1-3x identity → ALLOWED (count≤3, limit=3) + SotW updated');
-  console.log('   4x identity → VIOLATION ✅ (count=4 > limit=3) + SotW updated');
+  console.log('   1x GET bloodType → ALLOWED (count-read=1, limit=1) + SotW updated');
+  console.log('   2x GET bloodType → VIOLATION ✅ (count-read=2 > limit=1) + SotW updated');
+  console.log('   1-3x GET/PUT identity → ALLOWED (count≤3, limit=3) + SotW updated per action');
+  console.log('   4x GET identity → VIOLATION ✅ (count-read=4 > limit=3) + SotW updated');
+  console.log('   1x POST identity → ALLOWED (count-create=1, no constraint for create) + SotW updated');
   console.log('');
   console.log('🔧 Policy Active Check:');
   console.log('   • Policy with policyActive=false → SKIPPED from engine & logging');
   console.log('   • Local cache prevents lock timeout on remote sync');
   console.log('   • Use forceRefresh=true in loadPolicies() to force remote sync');
+  console.log('');
+  console.log('⚡ Action Hierarchy:');
+  console.log('   • ex:read/create/update → includedIn odrl:use');
+  console.log('   • Constraint applicableActions filter per action type');
+  console.log('   • Count tracking separated per action (read vs update)');
 });
