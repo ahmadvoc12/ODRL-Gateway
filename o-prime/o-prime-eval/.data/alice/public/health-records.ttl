@@ -1,0 +1,10 @@
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix dpv: <https://w3id.org/dpv#> .
+
+<#record> a <https://schema.org/Person> ;
+    dct:created "2026-06-20T09:00:00Z" ;
+    dpv:hasLegalBasis dpv:ExplicitConsent ;
+    dpv:hasPersonalData dpv:IdentifyingPersonalData, dpv:HealthData ;
+    dpv:hasDataCategory dpv:SensitivePersonalData, dpv:SpecialCategoryPersonalData ;
+    <https://schema.org/identifier> "12345" ;
+    <https://schema.org/bloodType> "O+" .

@@ -1,0 +1,104 @@
+@prefix odrl:   <http://www.w3.org/ns/odrl/2/> .
+@prefix dpv:    <https://w3id.org/dpv#> .
+@prefix dct:    <http://purl.org/dc/terms/> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex:     <https://example.org/> .
+@prefix schema: <https://schema.org/> .
+@prefix foaf:   <http://xmlns.com/foaf/0.1/> .
+@prefix report: <https://w3id.org/force/compliance-report#> .
+
+
+# ############################################################################
+# SECTION A: HEALTH-RECORD SCENARIO
+# ############################################################################
+
+# --------------------------------------------------------------------------
+# A.1 Temporal Access Window (Tier 1 - Enforceable)
+# Health data access is permitted only within the 2026 calendar-year window
+# (2026-01-01 00:00:00Z to 2026-12-31 23:59:59Z). This constraint is
+# technically enforceable because the gateway clock is a gateway-controlled
+# value (Tier 1 per Section 4.2 of the paper).
+# --------------------------------------------------------------------------
+ex:policy-temporal-window a odrl:Policy ;
+    odrl:uid <urn:uuid:temporal-01> ;
+    dct:title "Temporal Access Window Policy" ;
+    dct:description "Access to health records is only permitted within the 2026 calendar-year window (2026-01-01 to 2026-12-31)." ;
+    dct:created "2026-06-01T00:00:00Z"^^xsd:dateTime ;
+    dct:creator ex:pod-owner ;
+    odrl:profile <https://w3id.org/dpv/odrl> ;
+    odrl:target schema:MedicalRecord ;
+    report:activationState report:Active ;
+    odrl:permission ex:perm-temporal .
+
+ex:perm-temporal
+    odrl:assigner ex:pod-owner ;
+    odrl:assignee dpv:Recipient ;
+    odrl:action odrl:read ;
+    odrl:constraint ex:constraint-temporal-start, ex:constraint-temporal-end .
+
+# Access must be on or after 2026-01-01
+ex:constraint-temporal-start
+    odrl:leftOperand odrl:dateTime ;
+    odrl:operator odrl:gteq ;
+    odrl:rightOperand "2026-01-01T00:00:00Z"^^xsd:dateTime .
+
+# Access must be on or before 2026-12-31
+ex:constraint-temporal-end
+    odrl:leftOperand odrl:dateTime ;
+    odrl:operator odrl:lteq ;
+    odrl:rightOperand "2026-12-31T23:59:59Z"^^xsd:dateTime .
+
+
+# ############################################################################
+# SECTION B: UNIVERSITY / STUDENT-RECORD SCENARIO
+# ############################################################################
+
+# --------------------------------------------------------------------------
+# B.1 Academic Year Temporal Access Window (Tier 1 - Enforceable)
+# Student data access is permitted only within the 2026-2027 academic year
+# window (2026-08-01 to 2027-07-31). This reflects realistic university
+# administrative cycles where student records are accessed during the
+# academic year. This constraint is technically enforceable because the
+# gateway clock is a gateway-controlled value (Tier 1 per Section 4.2).
+# --------------------------------------------------------------------------
+ex:policy-student-temporal a odrl:Policy ;
+    odrl:uid <urn:uuid:student-temporal-01> ;
+    dct:title "Academic Year Temporal Access Policy" ;
+    dct:description "Access to student records is only permitted within the 2026-2027 academic year window (2026-08-01 to 2027-07-31)." ;
+    dct:created "2026-06-01T00:00:00Z"^^xsd:dateTime ;
+    dct:creator ex:student-owner ;
+    odrl:profile <https://w3id.org/dpv/odrl> ;
+    odrl:target schema:Person ;
+    report:activationState report:Active ;
+    odrl:permission ex:perm-student-temporal .
+
+ex:perm-student-temporal
+    odrl:assigner ex:student-owner ;
+    odrl:assignee dpv:Recipient ;
+    odrl:action odrl:read ;
+    odrl:constraint ex:constraint-student-temporal-start, ex:constraint-student-temporal-end .
+
+# Access must be on or after 2026-08-01 (start of academic year)
+ex:constraint-student-temporal-start
+    odrl:leftOperand odrl:dateTime ;
+    odrl:operator odrl:gteq ;
+    odrl:rightOperand "2026-08-01T00:00:00Z"^^xsd:dateTime .
+
+# Access must be on or before 2027-07-31 (end of academic year)
+ex:constraint-student-temporal-end
+    odrl:leftOperand odrl:dateTime ;
+    odrl:operator odrl:lteq ;
+    odrl:rightOperand "2027-07-31T23:59:59Z"^^xsd:dateTime .
+
+
+# ############################################################################
+# PARTY DEFINITIONS (shared across scenarios)
+# ############################################################################
+
+ex:pod-owner a foaf:Agent ;
+    dct:title "Pod Owner (Health-Record Scenario)" ;
+    dct:description "Data subject in the health-record demonstration scenario" .
+
+ex:student-owner a foaf:Agent ;
+    dct:title "Student Pod Owner (University Scenario)" ;
+    dct:description "Data subject in the university/student-record demonstration scenario" .

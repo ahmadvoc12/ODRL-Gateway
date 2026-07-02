@@ -1,0 +1,17 @@
+# CQ8: Which accesses involved special-category personal data?
+PREFIX prov: <http://www.w3.org/ns/prov#>
+PREFIX report: <https://w3id.org/force/compliance-report#>
+
+SELECT ?activity ?agent ?field ?dataCategory ?timestamp
+WHERE {
+  ?activity a prov:Activity ;
+            prov:wasAssociatedWith ?agent ;
+            prov:startedAtTime ?timestamp ;
+            report:hasFieldsBundle ?fb .
+  ?fb prov:hadMember ?f .
+  ?f report:fieldIRI ?field ;
+     report:dataCategory ?dataCategory .
+  FILTER(STR(?dataCategory) = "dpv:SpecialCategoryPersonalData"
+      || STR(?dataCategory) = "dpv:HealthData")
+}
+ORDER BY DESC(?timestamp)

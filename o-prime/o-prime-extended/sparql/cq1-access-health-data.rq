@@ -1,0 +1,14 @@
+# CQ1: Which applications accessed health data?
+PREFIX prov: <http://www.w3.org/ns/prov#>
+PREFIX report: <https://w3id.org/force/compliance-report#>
+
+SELECT ?agent ?resource ?timestamp ?deonticState
+WHERE {
+  ?activity a prov:Activity ;
+            prov:wasAssociatedWith ?agent ;
+            report:accessedResource ?resource ;
+            prov:startedAtTime ?timestamp ;
+            report:deonticState ?deonticState .
+  FILTER(CONTAINS(LCASE(STR(?resource)), "health") || CONTAINS(LCASE(STR(?resource)), "medical"))
+}
+ORDER BY DESC(?timestamp)

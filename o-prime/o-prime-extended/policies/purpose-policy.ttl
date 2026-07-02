@@ -1,0 +1,111 @@
+@prefix odrl:   <http://www.w3.org/ns/odrl/2/> .
+@prefix dpv:    <https://w3id.org/dpv#> .
+@prefix dct:    <http://purl.org/dc/terms/> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex:     <https://example.org/> .
+@prefix schema: <https://schema.org/> .
+@prefix foaf:   <http://xmlns.com/foaf/0.1/> .
+@prefix report: <https://w3id.org/force/compliance-report#> .
+
+
+# ############################################################################
+# SECTION A: HEALTH-RECORD SCENARIO
+# ############################################################################
+
+# --------------------------------------------------------------------------
+# A.1 Purpose Constraint - Healthcare Only (Tier 2 - Accountable)
+# Health records may only be accessed for dpv:Healthcare purposes.
+# Access for dpv:Marketing is prohibited and recorded as a purpose violation.
+# In the current prototype, purpose violations are accountability evidence
+# (not blocking conditions) - consistent with the trust model in Section 4.2.
+# --------------------------------------------------------------------------
+ex:policy-purpose-health a odrl:Policy ;
+    odrl:uid <urn:uuid:purpose-health-01> ;
+    dct:title "Health Data Purpose Constraint Policy" ;
+    dct:description "Health records may only be accessed for dpv:Healthcare purposes. Access for dpv:Marketing is prohibited - recorded as a purpose violation (not blocked at runtime in the current prototype)." ;
+    dct:created "2026-06-01T00:00:00Z"^^xsd:dateTime ;
+    dct:creator ex:pod-owner ;
+    odrl:profile <https://w3id.org/dpv/odrl> ;
+    odrl:target schema:MedicalRecord ;
+    report:activationState report:Active ;
+    odrl:permission ex:perm-purpose-health ;
+    odrl:prohibition ex:proh-purpose-marketing .
+
+ex:perm-purpose-health
+    odrl:assigner ex:pod-owner ;
+    odrl:assignee dpv:Recipient ;
+    odrl:action odrl:read ;
+    odrl:constraint ex:constraint-healthcare-purpose .
+
+ex:constraint-healthcare-purpose
+    odrl:leftOperand odrl:purpose ;
+    odrl:operator odrl:eq ;
+    odrl:rightOperand dpv:Healthcare .
+
+ex:proh-purpose-marketing
+    odrl:assignee dpv:Recipient ;
+    odrl:action odrl:read ;
+    odrl:constraint ex:constraint-proh-marketing-purpose .
+
+ex:constraint-proh-marketing-purpose
+    odrl:leftOperand odrl:purpose ;
+    odrl:operator odrl:eq ;
+    odrl:rightOperand dpv:Marketing .
+
+
+# ############################################################################
+# SECTION B: UNIVERSITY / STUDENT-RECORD SCENARIO
+# ############################################################################
+
+# --------------------------------------------------------------------------
+# B.1 Student Purpose Constraint - Employment/Research Only (Tier 2 - Accountable)
+# Student records may only be accessed for dpv:EmploymentVerification or
+# dpv:ResearchAndDevelopment purposes. Access for dpv:Marketing is prohibited
+# and recorded as a purpose violation. In the current prototype, purpose
+# violations are accountability evidence (not blocking conditions).
+# --------------------------------------------------------------------------
+ex:policy-student-purpose a odrl:Policy ;
+    odrl:uid <urn:uuid:student-purpose-01> ;
+    dct:title "Student Data Purpose Constraint Policy" ;
+    dct:description "Student records may only be accessed for dpv:EmploymentVerification or dpv:ResearchAndDevelopment purposes. Access for dpv:Marketing is prohibited - recorded as a purpose violation (not blocked at runtime in the current prototype)." ;
+    dct:created "2026-06-01T00:00:00Z"^^xsd:dateTime ;
+    dct:creator ex:student-owner ;
+    odrl:profile <https://w3id.org/dpv/odrl> ;
+    odrl:target schema:Person ;
+    report:activationState report:Active ;
+    odrl:permission ex:perm-student-purpose ;
+    odrl:prohibition ex:proh-student-marketing .
+
+ex:perm-student-purpose
+    odrl:assigner ex:student-owner ;
+    odrl:assignee dpv:Recipient ;
+    odrl:action odrl:read ;
+    odrl:constraint ex:constraint-student-purpose .
+
+ex:constraint-student-purpose
+    odrl:leftOperand odrl:purpose ;
+    odrl:operator odrl:isAnyOf ;
+    odrl:rightOperand dpv:EmploymentVerification, dpv:ResearchAndDevelopment .
+
+ex:proh-student-marketing
+    odrl:assignee dpv:Recipient ;
+    odrl:action odrl:read ;
+    odrl:constraint ex:constraint-student-proh-marketing .
+
+ex:constraint-student-proh-marketing
+    odrl:leftOperand odrl:purpose ;
+    odrl:operator odrl:eq ;
+    odrl:rightOperand dpv:Marketing .
+
+
+# ############################################################################
+# PARTY DEFINITIONS (shared across scenarios)
+# ############################################################################
+
+ex:pod-owner a foaf:Agent ;
+    dct:title "Pod Owner (Health-Record Scenario)" ;
+    dct:description "Data subject in the health-record demonstration scenario" .
+
+ex:student-owner a foaf:Agent ;
+    dct:title "Student Pod Owner (University Scenario)" ;
+    dct:description "Data subject in the university/student-record demonstration scenario" .

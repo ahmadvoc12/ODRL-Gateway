@@ -1,0 +1,122 @@
+@prefix odrl:   <http://www.w3.org/ns/odrl/2/> .
+@prefix dpv:    <https://w3id.org/dpv#> .
+@prefix dct:    <http://purl.org/dc/terms/> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex:     <https://example.org/> .
+@prefix schema: <https://schema.org/> .
+@prefix foaf:   <http://xmlns.com/foaf/0.1/> .
+@prefix report: <https://w3id.org/force/compliance-report#> .
+
+
+# ############################################################################
+# SECTION A: HEALTH-RECORD SCENARIO
+# ############################################################################
+
+# --------------------------------------------------------------------------
+# A.1 Approved Recipient Constraint (Tier 2 - Accountable)
+# Health data may only be accessed by approved healthcare and research
+# applications. Unauthorized applications are recorded as recipient
+# violations (accountability evidence; not blocked - authorization remains
+# with the access-control layer).
+# --------------------------------------------------------------------------
+ex:policy-recipient a odrl:Policy ;
+    odrl:uid <urn:uuid:recipient-01> ;
+    dct:title "Authorized Recipient Policy" ;
+    dct:description "Health data may only be accessed by approved recipient applications (HealthcareApp, ClinicalResearchApp)." ;
+    dct:created "2026-06-01T00:00:00Z"^^xsd:dateTime ;
+    dct:creator ex:pod-owner ;
+    odrl:profile <https://w3id.org/dpv/odrl> ;
+    odrl:target schema:MedicalRecord ;
+    report:activationState report:Active ;
+    odrl:permission ex:perm-recipient .
+
+ex:perm-recipient
+    odrl:assigner ex:pod-owner ;
+    odrl:assignee dpv:Recipient ;
+    odrl:action odrl:read ;
+    odrl:constraint ex:constraint-recipient .
+
+ex:constraint-recipient
+    odrl:leftOperand odrl:recipient ;
+    odrl:operator odrl:isAnyOf ;
+    odrl:rightOperand ex:HealthcareApp, ex:ClinicalResearchApp .
+
+
+# ############################################################################
+# SECTION B: UNIVERSITY / STUDENT-RECORD SCENARIO
+# ############################################################################
+
+# --------------------------------------------------------------------------
+# B.1 Student Approved Recipient Constraint (Tier 2 - Accountable)
+# Student records may only be accessed by approved university applications.
+# Unauthorized applications (ExternalEmployerApp, MarketingPlatform) are
+# recorded as recipient violations (accountability evidence; not blocked -
+# authorization remains with the access-control layer).
+# --------------------------------------------------------------------------
+ex:policy-student-recipient a odrl:Policy ;
+    odrl:uid <urn:uuid:student-recipient-01> ;
+    dct:title "Authorized Recipient Policy (Student)" ;
+    dct:description "Student records may only be accessed by approved university applications (CareerServicesApp, ResearchLabApp)." ;
+    dct:created "2026-06-01T00:00:00Z"^^xsd:dateTime ;
+    dct:creator ex:student-owner ;
+    odrl:profile <https://w3id.org/dpv/odrl> ;
+    odrl:target schema:Person ;
+    report:activationState report:Active ;
+    odrl:permission ex:perm-student-recipient .
+
+ex:perm-student-recipient
+    odrl:assigner ex:student-owner ;
+    odrl:assignee dpv:Recipient ;
+    odrl:action odrl:read ;
+    odrl:constraint ex:constraint-student-recipient .
+
+ex:constraint-student-recipient
+    odrl:leftOperand odrl:recipient ;
+    odrl:operator odrl:isAnyOf ;
+    odrl:rightOperand ex:CareerServicesApp, ex:ResearchLabApp .
+
+
+# ############################################################################
+# PARTY DEFINITIONS (shared across scenarios)
+# ############################################################################
+
+# --- Data Subjects ---
+ex:pod-owner a foaf:Agent ;
+    dct:title "Pod Owner (Health-Record Scenario)" ;
+    dct:description "Data subject in the health-record demonstration scenario" .
+
+ex:student-owner a foaf:Agent ;
+    dct:title "Student Pod Owner (University Scenario)" ;
+    dct:description "Data subject in the university/student-record demonstration scenario" .
+
+# --- Health-Record Scenario: Approved Recipients ---
+ex:HealthcareApp a odrl:Party ;
+    dct:title "Healthcare Application" ;
+    dct:description "Approved health management application for health-record scenario" .
+
+ex:ClinicalResearchApp a odrl:Party ;
+    dct:title "Clinical Research Application" ;
+    dct:description "Approved clinical research platform for health-record scenario" .
+
+# --- Health-Record Scenario: Unauthorized Recipients ---
+ex:MarketingApp a odrl:Party ;
+    dct:title "Marketing Application" ;
+    dct:description "Unauthorized marketing app in health-record scenario - should be rejected" .
+
+# --- Student-Record Scenario: Approved Recipients ---
+ex:CareerServicesApp a odrl:Party ;
+    dct:title "Career Services Application" ;
+    dct:description "University-approved career services platform for employment verification" .
+
+ex:ResearchLabApp a odrl:Party ;
+    dct:title "Research Laboratory Application" ;
+    dct:description "University-approved research platform for academic studies" .
+
+# --- Student-Record Scenario: Unauthorized Recipients ---
+ex:ExternalEmployerApp a odrl:Party ;
+    dct:title "External Employer Application" ;
+    dct:description "Unauthorized external employer in student scenario - should be rejected" .
+
+ex:MarketingPlatform a odrl:Party ;
+    dct:title "Marketing Platform" ;
+    dct:description "Unauthorized marketing platform in student scenario - should be rejected" .

@@ -1,0 +1,244 @@
+@prefix ex:     <https://example.org/> .
+@prefix prov:   <http://www.w3.org/ns/prov#> .
+@prefix dpv:    <https://w3id.org/dpv#> .
+@prefix dct:    <http://purl.org/dc/terms/> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix odrl:   <http://www.w3.org/ns/odrl/2/> .
+@prefix report: <https://w3id.org/force/compliance-report#> .
+
+# ============================================================
+# Representative O-Prime audit log.
+# Structure and vocabulary mirror exactly what the gateway emits
+# (gateway.mjs writeAccessLog): a root prov:Activity carrying the
+# ODRL Compliance Report Model deontic states, plus fields /
+# policy-evaluation / violation / duty sub-bundles.
+# Covers one allowed access and one violation of each constraint
+# type, so all ten SPARQL competency questions return results.
+# ============================================================
+
+ex:access-log a prov:Collection .
+
+# ---------- R1: ALLOWED read of special-category data, with inform duty ----------
+ex:access-1 a prov:Activity ;
+    prov:startedAtTime "2026-06-28T09:00:00Z"^^xsd:dateTime ;
+    prov:wasAssociatedWith ex:HealthcareApp ;
+    prov:used <http://localhost:3000/alice/public/health-records.ttl> ;
+    report:rule <urn:uuid:purpose-health-01> ;
+    report:activationState report:Active ;
+    report:attemptState report:Attempted ;
+    report:performanceState report:Performed ;
+    report:deonticState report:Fulfilled ;
+    report:decision "ALLOWED" ;
+    report:accessMethod "GET" ;
+    report:requestedAction "ex:read" ;
+    report:accessedResource <http://localhost:3000/alice/public/health-records.ttl> ;
+    report:recipientTrust "jwt-verified" ;
+    report:purposeTrust "url-inferred" ;
+    report:legalBasisTrust "resource-data" ;
+    report:temporalTrust "server-clock" .
+ex:access-log prov:hadMember ex:access-1 .
+ex:fields-bundle-1 a prov:Bundle ; dct:title "Accessed Data Fields" ; prov:wasGeneratedBy ex:access-1 .
+ex:access-1 report:hasFieldsBundle ex:fields-bundle-1 .
+ex:field-1-0 a report:AccessedDataField ;
+    report:fieldIRI <https://schema.org/bloodType> ;
+    report:fieldName "Blood Type" ;
+    report:fieldValue "O+" ;
+    report:isSensitive "true"^^xsd:boolean ;
+    report:dataCategory "dpv:SpecialCategoryPersonalData" ;
+    report:personalDataType "dpv:HealthData" ;
+    report:belongsToBundle ex:fields-bundle-1 ;
+    prov:wasGeneratedBy ex:access-1 .
+ex:fields-bundle-1 prov:hadMember ex:field-1-0 .
+ex:policy-bundle-1 a prov:Bundle ; dct:title "ODRL Policy Evaluation" ; prov:wasGeneratedBy ex:access-1 .
+ex:access-1 report:hasPolicyBundle ex:policy-bundle-1 .
+ex:policy-eval-1 a report:PolicyEvaluation ;
+    report:evaluatedPolicy ex:policy-bloodtype-default ;
+    report:evaluationResult "ALLOWED" ;
+    report:evaluationReason "N/A" ;
+    report:targetAsset <https://schema.org/bloodType> ;
+    report:belongsToBundle ex:policy-bundle-1 .
+ex:policy-bundle-1 prov:hadMember ex:policy-eval-1 .
+ex:access-1 report:hasDutyObligation ex:duty-1-0 .
+ex:duty-1-0 a report:DutyObligation ;
+    report:dutyAction "odrl:inform" ;
+    report:dutyTarget "ex:pod-owner" ;
+    report:dutyFulfilled "false"^^xsd:boolean .
+
+# ---------- R2: COUNT violation (bloodType read past limit) ----------
+ex:access-2 a prov:Activity ;
+    prov:startedAtTime "2026-06-28T09:05:00Z"^^xsd:dateTime ;
+    prov:wasAssociatedWith ex:HealthcareApp ;
+    prov:used <http://localhost:3000/alice/public/health-records.ttl> ;
+    report:rule <urn:uuid:2c5c9cc0-c73e-4f78-8905-c08bd427866d> ;
+    report:activationState report:Active ;
+    report:attemptState report:Attempted ;
+    report:performanceState report:NotPerformed ;
+    report:deonticState report:Violated ;
+    report:decision "VIOLATION" ;
+    report:accessMethod "GET" ;
+    report:requestedAction "ex:read" ;
+    report:accessedResource <http://localhost:3000/alice/public/health-records.ttl> ;
+    report:recipientTrust "jwt-verified" ;
+    report:purposeTrust "url-inferred" ;
+    report:legalBasisTrust "resource-data" ;
+    report:temporalTrust "server-clock" .
+ex:access-log prov:hadMember ex:access-2 .
+ex:violation-bundle-2 a prov:Bundle ; dct:title "Policy Violation Context" ; prov:wasGeneratedBy ex:access-2 .
+ex:access-2 report:hasViolationBundle ex:violation-bundle-2 .
+ex:violation-2 a report:PolicyViolation ;
+    report:violationType "ExcessiveAccessCount" ;
+    report:violationTimestamp "2026-06-28T09:05:00Z"^^xsd:dateTime ;
+    report:belongsToBundle ex:violation-bundle-2 ;
+    report:violatedPolicy ex:policy-bloodtype-default .
+ex:violation-bundle-2 prov:hadMember ex:violation-2 .
+ex:violation-2 report:hasFieldViolation ex:field-violation-2 .
+ex:field-violation-2 a report:FieldViolation ;
+    report:violatedField <https://schema.org/bloodType> ;
+    report:violatedPolicy ex:policy-bloodtype-default ;
+    report:observedCount "2"^^xsd:integer ;
+    report:allowedLimit "1"^^xsd:integer ;
+    report:actionType "ex:read" .
+
+# ---------- R3: PURPOSE violation (Marketing app on health data) ----------
+ex:access-3 a prov:Activity ;
+    prov:startedAtTime "2026-06-28T09:10:00Z"^^xsd:dateTime ;
+    prov:wasAssociatedWith ex:MarketingApp ;
+    prov:used <http://localhost:3000/alice/public/health-records.ttl> ;
+    report:rule <urn:uuid:purpose-health-01> ;
+    report:activationState report:Active ;
+    report:attemptState report:Attempted ;
+    report:performanceState report:NotPerformed ;
+    report:deonticState report:Violated ;
+    report:decision "VIOLATION" ;
+    report:accessMethod "GET" ;
+    report:requestedAction "ex:read" ;
+    report:accessedResource <http://localhost:3000/alice/public/health-records.ttl> ;
+    report:recipientTrust "jwt-verified" ;
+    report:purposeTrust "url-inferred" ;
+    report:legalBasisTrust "resource-data" ;
+    report:temporalTrust "server-clock" .
+ex:access-log prov:hadMember ex:access-3 .
+ex:violation-bundle-3 a prov:Bundle ; dct:title "Policy Violation Context" ; prov:wasGeneratedBy ex:access-3 .
+ex:access-3 report:hasViolationBundle ex:violation-bundle-3 .
+ex:violation-3 a report:PolicyViolation ;
+    report:violationType "ConstraintViolation" ;
+    report:violationTimestamp "2026-06-28T09:10:00Z"^^xsd:dateTime ;
+    report:belongsToBundle ex:violation-bundle-3 ;
+    report:violatedPolicy ex:policy-purpose-healthcare .
+ex:violation-bundle-3 prov:hadMember ex:violation-3 .
+ex:violation-3 report:hasConstraintViolation ex:cv-3 .
+ex:cv-3 a report:ConstraintViolation ;
+    report:violationType "ConstraintViolation" ;
+    report:violatedLeftOperand "odrl:purpose" ;
+    report:violatedOperator "odrl:eq" ;
+    report:requiredValue "dpv:Healthcare" ;
+    report:declaredValue "dpv:Marketing" ;
+    report:claimTrustSource "url-inferred" .
+
+# ---------- R4: LEGAL-BASIS violation (no explicit consent) ----------
+ex:access-4 a prov:Activity ;
+    prov:startedAtTime "2026-06-28T09:15:00Z"^^xsd:dateTime ;
+    prov:wasAssociatedWith ex:ClinicalResearchApp ;
+    prov:used <http://localhost:3000/alice/public/health-records.ttl> ;
+    report:rule <urn:uuid:legal-basis-01> ;
+    report:activationState report:Active ;
+    report:attemptState report:Attempted ;
+    report:performanceState report:NotPerformed ;
+    report:deonticState report:Violated ;
+    report:decision "VIOLATION" ;
+    report:accessMethod "GET" ;
+    report:requestedAction "ex:read" ;
+    report:accessedResource <http://localhost:3000/alice/public/health-records.ttl> ;
+    report:recipientTrust "jwt-verified" ;
+    report:purposeTrust "url-inferred" ;
+    report:legalBasisTrust "resource-data" ;
+    report:temporalTrust "server-clock" .
+ex:access-log prov:hadMember ex:access-4 .
+ex:violation-bundle-4 a prov:Bundle ; dct:title "Policy Violation Context" ; prov:wasGeneratedBy ex:access-4 .
+ex:access-4 report:hasViolationBundle ex:violation-bundle-4 .
+ex:violation-4 a report:PolicyViolation ;
+    report:violationType "ConstraintViolation" ;
+    report:violationTimestamp "2026-06-28T09:15:00Z"^^xsd:dateTime ;
+    report:belongsToBundle ex:violation-bundle-4 ;
+    report:violatedPolicy ex:policy-legal-basis-consent .
+ex:violation-bundle-4 prov:hadMember ex:violation-4 .
+ex:violation-4 report:hasConstraintViolation ex:cv-4 .
+ex:cv-4 a report:ConstraintViolation ;
+    report:violationType "ConstraintViolation" ;
+    report:violatedLeftOperand "dpv:hasLegalBasis" ;
+    report:violatedOperator "odrl:eq" ;
+    report:requiredValue "dpv:ExplicitConsent" ;
+    report:declaredValue "none" ;
+    report:claimTrustSource "resource-data" .
+
+# ---------- R5: TEMPORAL violation (outside allowed window) ----------
+ex:access-5 a prov:Activity ;
+    prov:startedAtTime "2025-12-31T23:59:00Z"^^xsd:dateTime ;
+    prov:wasAssociatedWith ex:HealthcareApp ;
+    prov:used <http://localhost:3000/alice/public/health-records.ttl> ;
+    report:rule <urn:uuid:temporal-01> ;
+    report:activationState report:Active ;
+    report:attemptState report:Attempted ;
+    report:performanceState report:NotPerformed ;
+    report:deonticState report:Violated ;
+    report:decision "VIOLATION" ;
+    report:accessMethod "GET" ;
+    report:requestedAction "ex:read" ;
+    report:accessedResource <http://localhost:3000/alice/public/health-records.ttl> ;
+    report:recipientTrust "jwt-verified" ;
+    report:purposeTrust "url-inferred" ;
+    report:legalBasisTrust "resource-data" ;
+    report:temporalTrust "server-clock" .
+ex:access-log prov:hadMember ex:access-5 .
+ex:violation-bundle-5 a prov:Bundle ; dct:title "Policy Violation Context" ; prov:wasGeneratedBy ex:access-5 .
+ex:access-5 report:hasViolationBundle ex:violation-bundle-5 .
+ex:violation-5 a report:PolicyViolation ;
+    report:violationType "ConstraintViolation" ;
+    report:violationTimestamp "2025-12-31T23:59:00Z"^^xsd:dateTime ;
+    report:belongsToBundle ex:violation-bundle-5 ;
+    report:violatedPolicy ex:policy-temporal-2026 .
+ex:violation-bundle-5 prov:hadMember ex:violation-5 .
+ex:violation-5 report:hasConstraintViolation ex:cv-5 .
+ex:cv-5 a report:ConstraintViolation ;
+    report:violationType "ConstraintViolation" ;
+    report:violatedLeftOperand "odrl:dateTime" ;
+    report:violatedOperator "odrl:gteq" ;
+    report:requiredValue "2026-01-01T00:00:00Z" ;
+    report:declaredValue "2025-12-31T23:59:00Z" ;
+    report:claimTrustSource "server-clock" .
+
+# ---------- R6: RECIPIENT violation (unauthorized app) ----------
+ex:access-6 a prov:Activity ;
+    prov:startedAtTime "2026-06-28T09:20:00Z"^^xsd:dateTime ;
+    prov:wasAssociatedWith ex:UnknownApp ;
+    prov:used <http://localhost:3000/alice/public/health-records.ttl> ;
+    report:rule <urn:uuid:recipient-01> ;
+    report:activationState report:Active ;
+    report:attemptState report:Attempted ;
+    report:performanceState report:NotPerformed ;
+    report:deonticState report:Violated ;
+    report:decision "VIOLATION" ;
+    report:accessMethod "GET" ;
+    report:requestedAction "ex:read" ;
+    report:accessedResource <http://localhost:3000/alice/public/health-records.ttl> ;
+    report:recipientTrust "jwt-verified" ;
+    report:purposeTrust "url-inferred" ;
+    report:legalBasisTrust "resource-data" ;
+    report:temporalTrust "server-clock" .
+ex:access-log prov:hadMember ex:access-6 .
+ex:violation-bundle-6 a prov:Bundle ; dct:title "Policy Violation Context" ; prov:wasGeneratedBy ex:access-6 .
+ex:access-6 report:hasViolationBundle ex:violation-bundle-6 .
+ex:violation-6 a report:PolicyViolation ;
+    report:violationType "ConstraintViolation" ;
+    report:violationTimestamp "2026-06-28T09:20:00Z"^^xsd:dateTime ;
+    report:belongsToBundle ex:violation-bundle-6 ;
+    report:violatedPolicy ex:policy-recipient-authorized .
+ex:violation-bundle-6 prov:hadMember ex:violation-6 .
+ex:violation-6 report:hasConstraintViolation ex:cv-6 .
+ex:cv-6 a report:ConstraintViolation ;
+    report:violationType "ConstraintViolation" ;
+    report:violatedLeftOperand "odrl:recipient" ;
+    report:violatedOperator "odrl:isAnyOf" ;
+    report:requiredValue "ex:HealthcareApp|ex:ClinicalResearchApp" ;
+    report:declaredValue "ex:UnknownApp" ;
+    report:claimTrustSource "jwt-verified" .

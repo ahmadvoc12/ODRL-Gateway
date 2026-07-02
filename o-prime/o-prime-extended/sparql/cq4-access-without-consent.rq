@@ -1,0 +1,18 @@
+# CQ4: Which accesses lacked explicit consent (legal-basis violation)?
+PREFIX prov: <http://www.w3.org/ns/prov#>
+PREFIX report: <https://w3id.org/force/compliance-report#>
+
+SELECT ?activity ?agent ?resource ?timestamp ?required ?declared
+WHERE {
+  ?activity a prov:Activity ;
+            prov:wasAssociatedWith ?agent ;
+            report:accessedResource ?resource ;
+            prov:startedAtTime ?timestamp ;
+            report:hasViolationBundle ?vb .
+  ?vb prov:hadMember ?v .
+  ?v report:hasConstraintViolation ?cv .
+  ?cv report:violatedLeftOperand "dpv:hasLegalBasis" ;
+      report:requiredValue ?required ;
+      report:declaredValue ?declared .
+}
+ORDER BY DESC(?timestamp)

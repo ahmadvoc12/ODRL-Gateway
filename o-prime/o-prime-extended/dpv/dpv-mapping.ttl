@@ -1,0 +1,141 @@
+@prefix schema: <https://schema.org/> .
+@prefix dpv: <https://w3id.org/dpv#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex: <https://example.org/> .
+
+# ============================================================
+# DPV Semantic Mapping Layer for O-Prime
+# Maps application-level predicates to DPV privacy categories
+# Covers: data category, sensitivity, purpose, legal basis,
+#         processing, recipient, data controller/processor,
+#         technical/organisational measures
+# ============================================================
+
+# ---- schema:identifier ----
+schema:identifier a dpv:PersonalData ;
+    dct:description "Unique identifier assigned to a person"@en ;
+    dpv:hasPersonalData dpv:IdentifyingPersonalData ;
+    dpv:hasDataCategory dpv:PersonalData ;
+    dpv:hasSector dpv:IdentityManagement .
+
+# ---- schema:name ----
+schema:name a dpv:PersonalData ;
+    dct:description "Full name of a person"@en ;
+    dpv:hasPersonalData dpv:IdentifyingPersonalData ;
+    dpv:hasDataCategory dpv:PersonalData ;
+    dpv:hasSector dpv:IdentityManagement .
+
+# ---- schema:email ----
+schema:email a dpv:PersonalData ;
+    dct:description "Email address"@en ;
+    dpv:hasPersonalData dpv:ContactData ;
+    dpv:hasDataCategory dpv:PersonalData .
+
+# ---- schema:birthDate ----
+schema:birthDate a dpv:PersonalData ;
+    dct:description "Date of birth"@en ;
+    dpv:hasPersonalData dpv:IdentifyingPersonalData ;
+    dpv:hasDataCategory dpv:SensitivePersonalData .
+
+# ---- schema:bloodType (Special Category) ----
+schema:bloodType a dpv:PersonalData ;
+    dct:description "Blood type - health-related special category data under GDPR Art. 9"@en ;
+    dpv:hasPersonalData dpv:HealthData ;
+    dpv:hasDataCategory dpv:SpecialCategoryPersonalData ;
+    dpv:hasSector dpv:Health ;
+    dpv:hasLegalBasis dpv:ExplicitConsent ;
+    dpv:hasTechnicalOrganisationalMeasure dpv:Encryption, dpv:AccessControlPolicy .
+
+# ---- schema:gender ----
+schema:gender a dpv:PersonalData ;
+    dct:description "Gender - special category under GDPR"@en ;
+    dpv:hasPersonalData dpv:DemographicData ;
+    dpv:hasDataCategory dpv:SpecialCategoryPersonalData ;
+    dpv:hasLegalBasis dpv:ExplicitConsent .
+
+# ---- schema:MedicalRecord ----
+schema:MedicalRecord a dpv:PersonalData ;
+    dct:description "Full medical record - collection of health-related sensitive data"@en ;
+    dpv:hasPersonalData dpv:HealthData, dpv:MedicalHealthData ;
+    dpv:hasDataCategory dpv:SpecialCategoryPersonalData ;
+    dpv:hasSector dpv:Health ;
+    dpv:hasLegalBasis dpv:ExplicitConsent ;
+    dpv:hasProcessing dpv:Use, dpv:Store, dpv:Access ;
+    dpv:hasTechnicalOrganisationalMeasure dpv:Encryption, dpv:AccessControlPolicy, dpv:DataMinimization .
+
+# ---- schema:additionalProperty (generic extension) ----
+schema:additionalProperty a dpv:PersonalData ;
+    dct:description "Generic additional property (typically health-domain attributes)"@en ;
+    dpv:hasPersonalData dpv:HealthData ;
+    dpv:hasDataCategory dpv:SpecialCategoryPersonalData ;
+    dpv:hasSector dpv:Health .
+
+# ---- schema:location ----
+schema:location a dpv:PersonalData ;
+    dct:description "Location data"@en ;
+    dpv:hasPersonalData dpv:LocationData ;
+    dpv:hasDataCategory dpv:SensitivePersonalData .
+
+# ---- schema:telephone ----
+schema:telephone a dpv:PersonalData ;
+    dct:description "Phone number"@en ;
+    dpv:hasPersonalData dpv:ContactData ;
+    dpv:hasDataCategory dpv:PersonalData .
+
+# ============================================================
+# Purpose Mapping
+# ============================================================
+dpv:Healthcare a dpv:Purpose ;
+    dct:description "Processing for healthcare delivery and management"@en .
+
+dpv:Marketing a dpv:Purpose ;
+    dct:description "Processing for marketing and advertising purposes"@en .
+
+dpv:Research a dpv:Purpose ;
+    dct:description "Processing for scientific research"@en .
+
+dpv:LegalObligation a dpv:Purpose ;
+    dct:description "Processing required to comply with legal obligations"@en .
+
+# ============================================================
+# Legal Basis Mapping
+# ============================================================
+dpv:ExplicitConsent a dpv:LegalBasis ;
+    dct:description "Explicit consent of the data subject (GDPR Art. 9(2)(a))"@en .
+
+dpv:LegitimateInterest a dpv:LegalBasis ;
+    dct:description "Legitimate interests of controller or third party (GDPR Art. 6(1)(f))"@en .
+
+dpv:LegalRequirement a dpv:LegalBasis ;
+    dct:description "Processing necessary for compliance with legal obligation (GDPR Art. 6(1)(c))"@en .
+
+dpv:VitalInterest a dpv:LegalBasis ;
+    dct:description "Processing to protect vital interests of data subject (GDPR Art. 9(2)(c))"@en .
+
+# ============================================================
+# Processing Operation Mapping
+# ============================================================
+dpv:Access a dpv:Processing ;
+    dct:description "Accessing or reading personal data"@en .
+
+dpv:Use a dpv:Processing ;
+    dct:description "Using personal data"@en .
+
+dpv:Store a dpv:Processing ;
+    dct:description "Storing personal data"@en .
+
+dpv:Share a dpv:Processing ;
+    dct:description "Sharing personal data with third parties"@en .
+
+dpv:Delete a dpv:Processing ;
+    dct:description "Erasing personal data"@en .
+
+# ============================================================
+# HTTP Method to DPV Processing Mapping
+# ============================================================
+ex:httpGetMapsTo ex:mapsToProcessing dpv:Access, dpv:Use .
+ex:httpPostMapsTo ex:mapsToProcessing dpv:Store, dpv:Use .
+ex:httpPutMapsTo ex:mapsToProcessing dpv:Store, dpv:Alter .
+ex:httpPatchMapsTo ex:mapsToProcessing dpv:Alter .
+ex:httpDeleteMapsTo ex:mapsToProcessing dpv:Delete, dpv:Erase .

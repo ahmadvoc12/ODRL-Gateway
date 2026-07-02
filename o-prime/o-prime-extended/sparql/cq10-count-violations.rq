@@ -1,0 +1,16 @@
+# CQ10: Which sensitive attributes exceeded their access-count limit?
+PREFIX prov: <http://www.w3.org/ns/prov#>
+PREFIX report: <https://w3id.org/force/compliance-report#>
+
+SELECT ?activity ?agent ?field ?observed ?allowed
+WHERE {
+  ?activity a prov:Activity ;
+            prov:wasAssociatedWith ?agent ;
+            report:hasViolationBundle ?vb .
+  ?vb prov:hadMember ?v .
+  ?v report:hasFieldViolation ?fv .
+  ?fv report:violatedField ?field ;
+      report:observedCount ?observed ;
+      report:allowedLimit ?allowed .
+}
+ORDER BY DESC(?observed)

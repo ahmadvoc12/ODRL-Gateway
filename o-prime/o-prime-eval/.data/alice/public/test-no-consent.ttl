@@ -1,0 +1,6 @@
+@prefix dct: <http://purl.org/dc/terms/> .
+
+<#record> a <https://schema.org/Person> ;
+    dct:created "2026-06-20T00:00:00Z" ;
+    <https://schema.org/identifier> "99999" ;
+    <https://schema.org/bloodType> "A+" .

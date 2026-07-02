@@ -1,0 +1,14 @@
+# CQ6: Access history for a given application (parameterize ?agent).
+PREFIX prov: <http://www.w3.org/ns/prov#>
+PREFIX report: <https://w3id.org/force/compliance-report#>
+
+SELECT ?agent ?resource ?timestamp ?deonticState
+WHERE {
+  VALUES ?agent { <https://example.org/HealthcareApp> }
+  ?activity a prov:Activity ;
+            prov:wasAssociatedWith ?agent ;
+            report:accessedResource ?resource ;
+            prov:startedAtTime ?timestamp ;
+            report:deonticState ?deonticState .
+}
+ORDER BY ?agent DESC(?timestamp)

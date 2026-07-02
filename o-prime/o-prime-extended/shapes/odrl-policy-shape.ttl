@@ -1,0 +1,453 @@
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix odrl:   <http://www.w3.org/ns/odrl/2/> .
+@prefix dct:    <http://purl.org/dc/terms/> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex:     <https://example.org/> .
+@prefix schema: <https://schema.org/> .
+@prefix dpv:    <https://w3id.org/dpv#> .
+@prefix foaf:   <http://xmlns.com/foaf/0.1/> .
+@prefix report: <https://w3id.org/force/compliance-report#> .
+
+
+# ############################################################################
+# SHACL SHAPES FOR ODRL POLICIES
+# ############################################################################
+# These shapes validate ODRL policies used in O-Prime, covering both
+# health-record and university/student-record scenarios. They ensure that
+# policies have required metadata, proper structure, and conform to the
+# ODRL Compliance Report Model used for audit logging.
+#
+# Coverage:
+#   - Policy metadata (uid, title, created, target)
+#   - Permissions with constraints (count, temporal, purpose, legal-basis,
+#     recipient)
+#   - Prohibitions (unconditional and conditional)
+#   - Duties (notification obligations)
+#   - Party definitions (data subjects, authorized recipients)
+#   - Policy alias mappings (O-Prime specific)
+#
+# Usage:
+#   python3 evaluation/shacl-validate-real.py
+#
+# Dependencies:
+#   - rdflib, pyshacl (Python packages)
+#
+# Note on Compound Constraints:
+#   Validation of compound constraints (e.g., temporal policies with both
+#   start and end dateTime constraints) is performed at the policy-engine
+#   level rather than via SHACL path expressions, because pyshacl does not
+#   support the SHACL path expression syntax (odrl:permission/odrl:constraint).
+#   The policy engine's evaluate() method enforces that temporal policies
+#   carry both odrl:gteq and odrl:lteq constraints before evaluation.
+#
+# Note on Optional Fields:
+#   Fields like dct:creator, report:activationState, and odrl:profile are
+#   marked as OPTIONAL (sh:minCount 0) to accommodate legacy policy files
+#   and authored policies that use the gateway's force:policyActive convention
+#   instead of the ODRL Compliance Report Model's report:activationState.
+#   The policy engine handles these variations transparently.
+# ############################################################################
+
+
+# ============================================================================
+# 1. ODRL POLICY SHAPE - Main policy structure (RELAXED)
+# ============================================================================
+# Validates the root structure of an ODRL policy. Required fields are kept
+# minimal (uid, title, created, target, permission/prohibition/duty) to
+# accommodate both authored policies and legacy inline policies. Optional
+# fields (creator, activationState, profile) are preserved for documentation
+# but do not block validation.
+# ============================================================================
+ex:ODRLPolicyShape a sh:NodeShape ;
+    sh:targetClass odrl:Policy ;
+    sh:name "ODRL Policy Shape" ;
+    sh:description "Validates that ODRL policies used in O-Prime have required metadata and structure." ;
+
+    # Required: uid (as IRI or literal)
+    sh:property [
+        sh:path odrl:uid ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:name "uid" ;
+        sh:message "ODRL Policy must have exactly one odrl:uid (as IRI <urn:uuid:...> or literal)." ;
+        sh:or (
+            [ sh:datatype xsd:string ]
+            [ sh:nodeKind sh:IRI ]
+        )
+    ] ;
+
+    # Required: dct:title
+    sh:property [
+        sh:path dct:title ;
+        sh:minCount 1 ;
+        sh:datatype xsd:string ;
+        sh:name "title" ;
+        sh:message "ODRL Policy must have a dct:title."
+    ] ;
+
+    # Required: dct:created
+    sh:property [
+        sh:path dct:created ;
+        sh:minCount 1 ;
+        sh:datatype xsd:dateTime ;
+        sh:name "created" ;
+        sh:message "ODRL Policy must have a dct:created timestamp."
+    ] ;
+
+    # Required: odrl:target
+    sh:property [
+        sh:path odrl:target ;
+        sh:minCount 1 ;
+        sh:name "target" ;
+        sh:message "ODRL Policy must specify at least one odrl:target." ;
+        sh:nodeKind sh:IRI
+    ] ;
+
+    # ⚠️ OPTIONAL: dct:creator (data subject)
+    # Kept optional to accommodate legacy policies without explicit creator
+    sh:property [
+        sh:path dct:creator ;
+        sh:minCount 0 ;
+        sh:maxCount 1 ;
+        sh:name "creator" ;
+        sh:message "If present, dct:creator must be a foaf:Agent or IRI." ;
+        sh:or (
+            [ sh:class foaf:Agent ]
+            [ sh:nodeKind sh:IRI ]
+        )
+    ] ;
+
+    # ⚠️ OPTIONAL: report:activationState
+    # Kept optional because the gateway also honours force:policyActive
+    sh:property [
+        sh:path report:activationState ;
+        sh:minCount 0 ;
+        sh:maxCount 1 ;
+        sh:name "activationState" ;
+        sh:message "If present, report:activationState must be Active, Inactive, or Suspended." ;
+        sh:in ( report:Active report:Inactive report:Suspended )
+    ] ;
+
+    # ⚠️ OPTIONAL: odrl:profile
+    # Kept optional because some authored policies omit the profile
+    sh:property [
+        sh:path odrl:profile ;
+        sh:minCount 0 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:name "profile" ;
+        sh:message "If present, odrl:profile must be an IRI."
+    ] ;
+
+    # Required: Must have at least one permission, prohibition, or duty
+    sh:or (
+        [ sh:property [ sh:path odrl:permission ; sh:minCount 1 ] ]
+        [ sh:property [ sh:path odrl:prohibition ; sh:minCount 1 ] ]
+        [ sh:property [ sh:path odrl:duty ; sh:minCount 1 ] ]
+    ) ;
+    sh:message "ODRL Policy must have at least one odrl:permission, odrl:prohibition, or odrl:duty." .
+
+
+# ============================================================================
+# 2. ODRL PERMISSION SHAPE
+# ============================================================================
+# Validates ODRL permission rules. Permissions specify what actions are
+# allowed on the target asset, optionally with constraints and duties.
+# ============================================================================
+ex:ODRLPermissionShape a sh:NodeShape ;
+    sh:targetClass odrl:Permission ;
+    sh:name "ODRL Permission Shape" ;
+    sh:description "Validates ODRL permission rules." ;
+
+    # Required: odrl:action
+    sh:property [
+        sh:path odrl:action ;
+        sh:minCount 1 ;
+        sh:name "action" ;
+        sh:message "Permission must specify at least one odrl:action." ;
+        sh:or (
+            [ sh:in ( odrl:read odrl:write odrl:modify odrl:create odrl:delete odrl:use odrl:distribute ) ]
+            [ sh:nodeKind sh:IRI ]
+        )
+    ] ;
+
+    # Required: odrl:assigner (data subject)
+    sh:property [
+        sh:path odrl:assigner ;
+        sh:minCount 1 ;
+        sh:name "assigner" ;
+        sh:message "Permission must specify odrl:assigner (data subject)." ;
+        sh:or (
+            [ sh:class foaf:Agent ]
+            [ sh:nodeKind sh:IRI ]
+        )
+    ] ;
+
+    # Optional: odrl:assignee (recipient)
+    sh:property [
+        sh:path odrl:assignee ;
+        sh:maxCount 1 ;
+        sh:name "assignee" ;
+        sh:message "Permission may specify odrl:assignee (recipient)." ;
+        sh:or (
+            [ sh:class odrl:Party ]
+            [ sh:class foaf:Agent ]
+            [ sh:nodeKind sh:IRI ]
+        )
+    ] ;
+
+    # Optional: odrl:constraint (one or more)
+    sh:property [
+        sh:path odrl:constraint ;
+        sh:name "constraint" ;
+        sh:message "Permission may have odrl:constraint(s)." ;
+        sh:nodeKind sh:BlankNodeOrIRI
+    ] ;
+
+    # Optional: odrl:duty (notification obligations)
+    sh:property [
+        sh:path odrl:duty ;
+        sh:name "duty" ;
+        sh:message "Permission may have odrl:duty (notification obligations)." ;
+        sh:nodeKind sh:BlankNodeOrIRI
+    ] .
+
+
+# ============================================================================
+# 3. ODRL PROHIBITION SHAPE
+# ============================================================================
+# Validates ODRL prohibition rules. Prohibitions specify what actions are
+# forbidden on the target asset. Can be unconditional (always forbidden)
+# or conditional (forbidden when constraints are met).
+# ============================================================================
+ex:ODRLProhibitionShape a sh:NodeShape ;
+    sh:targetClass odrl:Prohibition ;
+    sh:name "ODRL Prohibition Shape" ;
+    sh:description "Validates ODRL prohibition rules." ;
+
+    # Required: odrl:action
+    sh:property [
+        sh:path odrl:action ;
+        sh:minCount 1 ;
+        sh:name "action" ;
+        sh:message "Prohibition must specify at least one odrl:action." ;
+        sh:or (
+            [ sh:in ( odrl:read odrl:write odrl:modify odrl:create odrl:delete odrl:use odrl:distribute ) ]
+            [ sh:nodeKind sh:IRI ]
+        )
+    ] ;
+
+    # Optional: odrl:assignee
+    sh:property [
+        sh:path odrl:assignee ;
+        sh:maxCount 1 ;
+        sh:name "assignee" ;
+        sh:message "Prohibition may specify odrl:assignee." ;
+        sh:or (
+            [ sh:class odrl:Party ]
+            [ sh:class foaf:Agent ]
+            [ sh:nodeKind sh:IRI ]
+        )
+    ] ;
+
+    # Optional: odrl:constraint (for conditional prohibitions)
+    sh:property [
+        sh:path odrl:constraint ;
+        sh:name "constraint" ;
+        sh:message "Prohibition may have odrl:constraint(s) for conditional prohibitions." ;
+        sh:nodeKind sh:BlankNodeOrIRI
+    ] .
+
+
+# ============================================================================
+# 4. ODRL CONSTRAINT SHAPE
+# ============================================================================
+# Validates ODRL constraint rules. Constraints specify conditions that
+# must be satisfied for a permission to apply or a prohibition to trigger.
+# Supports: count, temporal, purpose, legal-basis, recipient.
+# ============================================================================
+ex:ODRLConstraintShape a sh:NodeShape ;
+    sh:targetClass odrl:Constraint ;
+    sh:name "ODRL Constraint Shape" ;
+    sh:description "Validates ODRL constraint rules (count, temporal, purpose, legal-basis, recipient)." ;
+
+    # Required: odrl:leftOperand
+    sh:property [
+        sh:path odrl:leftOperand ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:name "leftOperand" ;
+        sh:message "Constraint must have exactly one odrl:leftOperand." ;
+        sh:or (
+            [ sh:in ( odrl:count odrl:dateTime odrl:purpose odrl:recipient dpv:hasLegalBasis ) ]
+            [ sh:nodeKind sh:IRI ]
+        )
+    ] ;
+
+    # Required: odrl:operator
+    sh:property [
+        sh:path odrl:operator ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:name "operator" ;
+        sh:message "Constraint must have exactly one odrl:operator." ;
+        sh:or (
+            [ sh:in ( odrl:eq odrl:neq odrl:gt odrl:gteq odrl:lt odrl:lteq odrl:isAnyOf odrl:isNoneOf odrl:isAllOf ) ]
+            [ sh:nodeKind sh:IRI ]
+        )
+    ] ;
+
+    # Required: odrl:rightOperand (single value or list)
+    sh:property [
+        sh:path odrl:rightOperand ;
+        sh:minCount 1 ;
+        sh:name "rightOperand" ;
+        sh:message "Constraint must have at least one odrl:rightOperand." ;
+        sh:or (
+            [ sh:datatype xsd:integer ]
+            [ sh:datatype xsd:dateTime ]
+            [ sh:datatype xsd:string ]
+            [ sh:nodeKind sh:IRI ]
+            [ sh:class rdf:List ]
+        )
+    ] .
+
+
+# ============================================================================
+# 5. ODRL DUTY SHAPE
+# ============================================================================
+# Validates ODRL duty rules. Duties specify obligations that must be
+# fulfilled when a permission is exercised. In O-Prime, the primary duty
+# is odrl:inform (notification obligation).
+# ============================================================================
+ex:ODRLDutyShape a sh:NodeShape ;
+    sh:targetClass odrl:Duty ;
+    sh:name "ODRL Duty Shape" ;
+    sh:description "Validates ODRL duty rules (notification obligations)." ;
+
+    # Required: odrl:action
+    sh:property [
+        sh:path odrl:action ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:name "action" ;
+        sh:message "Duty must specify exactly one odrl:action." ;
+        sh:or (
+            [ sh:hasValue odrl:inform ]
+            [ sh:nodeKind sh:IRI ]
+        )
+    ] ;
+
+    # Required: odrl:target (who to notify)
+    sh:property [
+        sh:path odrl:target ;
+        sh:minCount 1 ;
+        sh:name "target" ;
+        sh:message "Duty must specify odrl:target (who to notify)." ;
+        sh:or (
+            [ sh:class foaf:Agent ]
+            [ sh:nodeKind sh:IRI ]
+        )
+    ] .
+
+
+# ============================================================================
+# 6. ODRL PARTY SHAPE
+# ============================================================================
+# Validates ODRL party definitions. Parties represent authorized recipients
+# (applications) that may access the target asset under the policy.
+# ============================================================================
+ex:ODRLPartyShape a sh:NodeShape ;
+    sh:targetClass odrl:Party ;
+    sh:name "ODRL Party Shape" ;
+    sh:description "Validates ODRL party definitions (authorized recipients)." ;
+
+    # Required: dct:title
+    sh:property [
+        sh:path dct:title ;
+        sh:minCount 1 ;
+        sh:datatype xsd:string ;
+        sh:name "title" ;
+        sh:message "Party must have a dct:title."
+    ] ;
+
+    # Optional: dct:description
+    sh:property [
+        sh:path dct:description ;
+        sh:maxCount 1 ;
+        sh:name "description" ;
+        sh:message "Party may have a dct:description." ;
+        sh:or (
+            [ sh:datatype xsd:string ]
+            [ sh:datatype rdf:langString ]
+        )
+    ] .
+
+
+# ============================================================================
+# 7. DATA SUBJECT SHAPE
+# ============================================================================
+# Validates data subject definitions. Data subjects are the pod owners
+# who create and manage policies over their personal data.
+# ============================================================================
+ex:DataSubjectShape a sh:NodeShape ;
+    sh:targetClass foaf:Agent ;
+    sh:name "Data Subject Shape" ;
+    sh:description "Validates data subject definitions (pod owners)." ;
+
+    # Required: dct:title
+    sh:property [
+        sh:path dct:title ;
+        sh:minCount 1 ;
+        sh:datatype xsd:string ;
+        sh:name "title" ;
+        sh:message "Data subject must have a dct:title."
+    ] ;
+
+    # Optional: dct:description
+    sh:property [
+        sh:path dct:description ;
+        sh:maxCount 1 ;
+        sh:name "description" ;
+        sh:message "Data subject may have a dct:description." ;
+        sh:or (
+            [ sh:datatype xsd:string ]
+            [ sh:datatype rdf:langString ]
+        )
+    ] .
+
+
+# ============================================================================
+# 8. POLICY ALIAS MAPPING SHAPE (O-Prime Specific)
+# ============================================================================
+# Validates O-Prime policy alias mappings used in audit logs. Aliases
+# provide stable references to policies even when the policy resource
+# IRI changes, enabling long-term audit traceability.
+# ============================================================================
+ex:PolicyAliasShape a sh:NodeShape ;
+    sh:targetClass report:PolicyAlias ;
+    sh:name "Policy Alias Mapping Shape" ;
+    sh:description "Validates O-Prime policy alias mappings used in audit logs." ;
+
+    # Required: report:mapsToPolicy
+    sh:property [
+        sh:path report:mapsToPolicy ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:name "mapsToPolicy" ;
+        sh:message "Policy alias must map to exactly one policy resource." ;
+        sh:nodeKind sh:IRI
+    ] ;
+
+    # Required: report:mapsToUUID
+    sh:property [
+        sh:path report:mapsToUUID ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:name "mapsToUUID" ;
+        sh:message "Policy alias must map to exactly one UUID." ;
+        sh:pattern "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    ] .

@@ -1,0 +1,97 @@
+@prefix odrl:   <http://www.w3.org/ns/odrl/2/> .
+@prefix dpv:    <https://w3id.org/dpv#> .
+@prefix dct:    <http://purl.org/dc/terms/> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex:     <https://example.org/> .
+@prefix schema: <https://schema.org/> .
+@prefix foaf:   <http://xmlns.com/foaf/0.1/> .
+@prefix report: <https://w3id.org/force/compliance-report#> .
+
+
+# ############################################################################
+# SECTION A: HEALTH-RECORD SCENARIO
+# ############################################################################
+
+# --------------------------------------------------------------------------
+# A.1 Count-based Access Limit (Tier 1 - Enforceable)
+# Blood type may be accessed (read, modify, or create) at most once.
+# Cumulative count <= 1 per application (no session reset).
+# --------------------------------------------------------------------------
+ex:policy-count-bloodtype a odrl:Policy ;
+    odrl:uid <urn:uuid:2c5c9cc0-c73e-4f78-8905-c08bd427866d> ;
+    dct:title "Blood Type Access Count Policy" ;
+    dct:description "Blood type may be accessed (read, modify, or create) at most once - cumulative count <= 1 per application (no session reset)." ;
+    dct:created "2026-06-01T00:00:00Z"^^xsd:dateTime ;
+    dct:creator ex:pod-owner ;
+    odrl:profile <https://w3id.org/dpv/odrl> ;
+    odrl:target schema:bloodType ;
+    report:activationState report:Active ;
+    odrl:permission ex:perm-count-bloodtype ;
+    odrl:prohibition ex:proh-count-distribute .
+
+ex:perm-count-bloodtype
+    odrl:assigner ex:pod-owner ;
+    odrl:assignee dpv:Recipient ;
+    odrl:action odrl:read, odrl:modify, odrl:create ;
+    odrl:constraint ex:constraint-count-bloodtype .
+
+ex:constraint-count-bloodtype
+    odrl:leftOperand odrl:count ;
+    odrl:operator odrl:lteq ;
+    odrl:rightOperand "1"^^xsd:integer .
+
+ex:proh-count-distribute
+    odrl:assignee dpv:Recipient ;
+    odrl:action odrl:distribute .
+
+
+# ############################################################################
+# SECTION B: UNIVERSITY / STUDENT-RECORD SCENARIO
+# ############################################################################
+
+# --------------------------------------------------------------------------
+# B.1 Student Record Count-based Access Limit (Tier 1 - Enforceable)
+# Academic transcript (schema:Person) may be accessed at most 3 times per
+# application. More permissive than health-record (limit=1) to reflect
+# realistic career-services use cases where multiple reads are expected.
+# Cumulative count <= 3 per application (no session reset).
+# --------------------------------------------------------------------------
+ex:policy-student-count a odrl:Policy ;
+    odrl:uid <urn:uuid:student-count-01> ;
+    dct:title "Student Record Access Count Policy" ;
+    dct:description "Academic records may be accessed at most 3 times per application - cumulative count <= 3 (no session reset)." ;
+    dct:created "2026-06-01T00:00:00Z"^^xsd:dateTime ;
+    dct:creator ex:student-owner ;
+    odrl:profile <https://w3id.org/dpv/odrl> ;
+    odrl:target schema:Person ;
+    report:activationState report:Active ;
+    odrl:permission ex:perm-student-count ;
+    odrl:prohibition ex:proh-student-distribute .
+
+ex:perm-student-count
+    odrl:assigner ex:student-owner ;
+    odrl:assignee dpv:Recipient ;
+    odrl:action odrl:read, odrl:modify, odrl:create ;
+    odrl:constraint ex:constraint-student-count .
+
+ex:constraint-student-count
+    odrl:leftOperand odrl:count ;
+    odrl:operator odrl:lteq ;
+    odrl:rightOperand "3"^^xsd:integer .
+
+ex:proh-student-distribute
+    odrl:assignee dpv:Recipient ;
+    odrl:action odrl:distribute .
+
+
+# ############################################################################
+# PARTY DEFINITIONS (shared across scenarios)
+# ############################################################################
+
+ex:pod-owner a foaf:Agent ;
+    dct:title "Pod Owner (Health-Record Scenario)" ;
+    dct:description "Data subject in the health-record demonstration scenario" .
+
+ex:student-owner a foaf:Agent ;
+    dct:title "Student Pod Owner (University Scenario)" ;
+    dct:description "Data subject in the university/student-record demonstration scenario" .

@@ -1,0 +1,127 @@
+@prefix odrl:   <http://www.w3.org/ns/odrl/2/> .
+@prefix dpv:    <https://w3id.org/dpv#> .
+@prefix dct:    <http://purl.org/dc/terms/> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex:     <https://example.org/> .
+@prefix schema: <https://schema.org/> .
+@prefix foaf:   <http://xmlns.com/foaf/0.1/> .
+@prefix report: <https://w3id.org/force/compliance-report#> .
+
+
+# ############################################################################
+# SECTION A: HEALTH-RECORD SCENARIO
+# ############################################################################
+
+# --------------------------------------------------------------------------
+# A.1 Notification Duty (Tier 2 - Accountable)
+# Applications accessing health data MUST send a notification to the
+# data subject. Unfulfilled duties are recorded as accountability evidence;
+# they do not block access in the current prototype.
+# --------------------------------------------------------------------------
+ex:policy-duty-notify a odrl:Policy ;
+    odrl:uid <urn:uuid:duty-notify-01> ;
+    dct:title "Notification Duty Policy" ;
+    dct:description "Any access to health data must be accompanied by a notification to the data subject." ;
+    dct:created "2026-06-01T00:00:00Z"^^xsd:dateTime ;
+    dct:creator ex:pod-owner ;
+    odrl:profile <https://w3id.org/dpv/odrl> ;
+    odrl:target schema:MedicalRecord ;
+    report:activationState report:Active ;
+    odrl:permission ex:perm-notify .
+
+ex:perm-notify
+    odrl:assigner ex:pod-owner ;
+    odrl:assignee dpv:Recipient ;
+    odrl:action odrl:read ;
+    odrl:duty ex:duty-notify .
+
+ex:duty-notify a odrl:Duty ;
+    odrl:action odrl:inform ;
+    odrl:target ex:pod-owner ;
+    dct:description "Notify the data subject about each access to their health data." .
+
+# --------------------------------------------------------------------------
+# A.2 Prohibition on Distribution (Tier 2 - Detectable)
+# Personal health data cannot be distributed to third parties.
+# Detected as policy violations; recorded as accountability evidence.
+# --------------------------------------------------------------------------
+ex:policy-prohibition-distribute a odrl:Policy ;
+    odrl:uid <urn:uuid:proh-dist-01> ;
+    dct:title "No Distribution Policy" ;
+    dct:description "Prohibits distribution of personal health data to third parties (GDPR data minimization principle)." ;
+    dct:created "2026-06-01T00:00:00Z"^^xsd:dateTime ;
+    dct:creator ex:pod-owner ;
+    odrl:profile <https://w3id.org/dpv/odrl> ;
+    odrl:target schema:MedicalRecord ;
+    report:activationState report:Active ;
+    odrl:prohibition ex:proh-distribute .
+
+ex:proh-distribute
+    odrl:assignee dpv:Recipient ;
+    odrl:action odrl:distribute .
+
+
+# ############################################################################
+# SECTION B: UNIVERSITY / STUDENT-RECORD SCENARIO
+# ############################################################################
+
+# --------------------------------------------------------------------------
+# B.1 Student Notification Duty (Tier 2 - Accountable)
+# Applications accessing student records MUST send a notification to the
+# student. Unfulfilled duties are recorded as accountability evidence;
+# they do not block access in the current prototype.
+# --------------------------------------------------------------------------
+ex:policy-student-duty-notify a odrl:Policy ;
+    odrl:uid <urn:uuid:student-duty-notify-01> ;
+    dct:title "Student Notification Duty Policy" ;
+    dct:description "Any access to student academic records must be accompanied by a notification to the student." ;
+    dct:created "2026-06-01T00:00:00Z"^^xsd:dateTime ;
+    dct:creator ex:student-owner ;
+    odrl:profile <https://w3id.org/dpv/odrl> ;
+    odrl:target schema:Person ;
+    report:activationState report:Active ;
+    odrl:permission ex:perm-student-notify .
+
+ex:perm-student-notify
+    odrl:assigner ex:student-owner ;
+    odrl:assignee dpv:Recipient ;
+    odrl:action odrl:read ;
+    odrl:duty ex:duty-student-notify .
+
+ex:duty-student-notify a odrl:Duty ;
+    odrl:action odrl:inform ;
+    odrl:target ex:student-owner ;
+    dct:description "Notify the student about each access to their academic records." .
+
+# --------------------------------------------------------------------------
+# B.2 Prohibition on Distribution of Student Data (Tier 2 - Detectable)
+# Student personal data cannot be distributed to third parties.
+# Detected as policy violations; recorded as accountability evidence.
+# --------------------------------------------------------------------------
+ex:policy-student-prohibition-distribute a odrl:Policy ;
+    odrl:uid <urn:uuid:student-proh-dist-01> ;
+    dct:title "No Distribution Policy (Student)" ;
+    dct:description "Prohibits distribution of student personal data to third parties (GDPR data minimization principle)." ;
+    dct:created "2026-06-01T00:00:00Z"^^xsd:dateTime ;
+    dct:creator ex:student-owner ;
+    odrl:profile <https://w3id.org/dpv/odrl> ;
+    odrl:target schema:Person ;
+    report:activationState report:Active ;
+    odrl:prohibition ex:proh-student-distribute .
+
+ex:proh-student-distribute
+    odrl:assignee dpv:Recipient ;
+    odrl:action odrl:distribute .
+
+
+# ############################################################################
+# PARTY DEFINITIONS (shared across scenarios)
+# ############################################################################
+
+ex:pod-owner a foaf:Agent ;
+    dct:title "Pod Owner (Health-Record Scenario)" ;
+    dct:description "Data subject in the health-record demonstration scenario" .
+
+ex:student-owner a foaf:Agent ;
+    dct:title "Student Pod Owner (University Scenario)" ;
+    dct:description "Data subject in the university/student-record demonstration scenario" .

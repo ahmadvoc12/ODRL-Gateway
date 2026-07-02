@@ -1,0 +1,87 @@
+@prefix odrl:   <http://www.w3.org/ns/odrl/2/> .
+@prefix dpv:    <https://w3id.org/dpv#> .
+@prefix dct:    <http://purl.org/dc/terms/> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex:     <https://example.org/> .
+@prefix schema: <https://schema.org/> .
+@prefix foaf:   <http://xmlns.com/foaf/0.1/> .
+@prefix report: <https://w3id.org/force/compliance-report#> .
+
+
+# ############################################################################
+# SECTION A: HEALTH-RECORD SCENARIO
+# ############################################################################
+
+# --------------------------------------------------------------------------
+# A.1 Explicit Consent Legal Basis (Tier 2 - Accountable)
+# GDPR Art. 9 - special-category personal data (e.g., health data) requires
+# dpv:ExplicitConsent as legal basis. The legal basis is read from the
+# accessed resource's dpv:hasLegalBasis declaration.
+# --------------------------------------------------------------------------
+ex:policy-explicit-consent a odrl:Policy ;
+    odrl:uid <urn:uuid:legal-basis-01> ;
+    dct:title "Explicit Consent Legal Basis Policy" ;
+    dct:description "Access to SpecialCategoryPersonalData requires dpv:ExplicitConsent as legal basis, in accordance with GDPR Article 9." ;
+    dct:created "2026-06-01T00:00:00Z"^^xsd:dateTime ;
+    dct:creator ex:pod-owner ;
+    odrl:profile <https://w3id.org/dpv/odrl> ;
+    odrl:target dpv:SpecialCategoryPersonalData ;
+    report:activationState report:Active ;
+    odrl:permission ex:perm-explicit-consent .
+
+ex:perm-explicit-consent
+    odrl:assigner ex:pod-owner ;
+    odrl:assignee dpv:Recipient ;
+    odrl:action odrl:read ;
+    odrl:constraint ex:constraint-explicit-consent .
+
+ex:constraint-explicit-consent
+    odrl:leftOperand dpv:hasLegalBasis ;
+    odrl:operator odrl:eq ;
+    odrl:rightOperand dpv:ExplicitConsent .
+
+
+# ############################################################################
+# SECTION B: UNIVERSITY / STUDENT-RECORD SCENARIO
+# ############################################################################
+
+# --------------------------------------------------------------------------
+# B.1 Student Explicit Consent Legal Basis (Tier 2 - Accountable)
+# GDPR Art. 9 - special-category student data (e.g., birthDate, financial
+# aid records) requires dpv:ExplicitConsent as legal basis. The legal basis
+# is read from the accessed resource's dpv:hasLegalBasis declaration.
+# --------------------------------------------------------------------------
+ex:policy-student-explicit-consent a odrl:Policy ;
+    odrl:uid <urn:uuid:student-legal-basis-01> ;
+    dct:title "Explicit Consent Legal Basis Policy (Student)" ;
+    dct:description "Access to SpecialCategoryPersonalData (birthDate, financial aid) requires dpv:ExplicitConsent as legal basis, in accordance with GDPR Article 9." ;
+    dct:created "2026-06-01T00:00:00Z"^^xsd:dateTime ;
+    dct:creator ex:student-owner ;
+    odrl:profile <https://w3id.org/dpv/odrl> ;
+    odrl:target dpv:SpecialCategoryPersonalData ;
+    report:activationState report:Active ;
+    odrl:permission ex:perm-student-explicit-consent .
+
+ex:perm-student-explicit-consent
+    odrl:assigner ex:student-owner ;
+    odrl:assignee dpv:Recipient ;
+    odrl:action odrl:read ;
+    odrl:constraint ex:constraint-student-explicit-consent .
+
+ex:constraint-student-explicit-consent
+    odrl:leftOperand dpv:hasLegalBasis ;
+    odrl:operator odrl:eq ;
+    odrl:rightOperand dpv:ExplicitConsent .
+
+
+# ############################################################################
+# PARTY DEFINITIONS (shared across scenarios)
+# ############################################################################
+
+ex:pod-owner a foaf:Agent ;
+    dct:title "Pod Owner (Health-Record Scenario)" ;
+    dct:description "Data subject in the health-record demonstration scenario" .
+
+ex:student-owner a foaf:Agent ;
+    dct:title "Student Pod Owner (University Scenario)" ;
+    dct:description "Data subject in the university/student-record demonstration scenario" .

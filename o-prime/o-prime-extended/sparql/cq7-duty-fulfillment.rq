@@ -1,0 +1,15 @@
+# CQ7: Which duty obligations are recorded, and are they outstanding?
+PREFIX prov: <http://www.w3.org/ns/prov#>
+PREFIX report: <https://w3id.org/force/compliance-report#>
+
+SELECT ?activity ?agent ?dutyAction ?dutyTarget ?fulfilled
+WHERE {
+  ?activity a prov:Activity ;
+            prov:wasAssociatedWith ?agent ;
+            report:hasDutyObligation ?duty .
+  ?duty a report:DutyObligation ;
+        report:dutyAction ?dutyAction ;
+        report:dutyTarget ?dutyTarget ;
+        report:dutyFulfilled ?fulfilled .
+}
+ORDER BY ?fulfilled

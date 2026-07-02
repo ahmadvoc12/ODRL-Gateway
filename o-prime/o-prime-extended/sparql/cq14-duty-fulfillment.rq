@@ -1,0 +1,20 @@
+# CQ14: Were all duty obligations fulfilled for the monitored accesses?
+PREFIX prov:   <http://www.w3.org/ns/prov#>
+PREFIX report: <https://w3id.org/force/compliance-report#>
+PREFIX xsd:    <http://www.w3.org/2001/XMLSchema#>
+
+SELECT ?agent
+       (COUNT(?duty) AS ?totalDuties)
+       (SUM(?fulfilledInt) AS ?fulfilledCount)
+       (COUNT(?duty) - SUM(?fulfilledInt) AS ?unfulfilledCount)
+WHERE {
+  ?activity a prov:Activity ;
+            prov:wasAssociatedWith ?agent ;
+            report:hasDutyObligation ?duty .
+  ?duty report:dutyAction ?action ;
+        report:dutyFulfilled ?fulfilled .
+  BIND(xsd:integer(?fulfilled) AS ?fulfilledInt)
+}
+GROUP BY ?agent
+HAVING (COUNT(?duty) > 0)
+ORDER BY ?agent

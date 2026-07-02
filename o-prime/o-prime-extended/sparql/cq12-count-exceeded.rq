@@ -1,0 +1,20 @@
+# CQ12: Which recipients exceeded the per-application access limit?
+PREFIX prov:   <http://www.w3.org/ns/prov#>
+PREFIX report: <https://w3id.org/force/compliance-report#>
+PREFIX xsd:    <http://www.w3.org/2001/XMLSchema#>
+
+SELECT ?agent ?field ?observed ?allowed ?actionType
+       (xsd:integer(?observed) - xsd:integer(?allowed) AS ?excess)
+WHERE {
+  ?activity a prov:Activity ;
+            prov:wasAssociatedWith ?agent ;
+            report:hasViolationBundle ?vb .
+  ?vb prov:hadMember ?v .
+  ?v report:hasFieldViolation ?fv .
+  ?fv report:violatedField ?field ;
+      report:observedCount ?observed ;
+      report:allowedLimit ?allowed .
+  OPTIONAL { ?fv report:actionType ?actionType }
+  FILTER (xsd:integer(?observed) > xsd:integer(?allowed))
+}
+ORDER BY DESC(?excess)

@@ -1,0 +1,19 @@
+# CQ2: Which accesses violated an ODRL policy?
+PREFIX prov: <http://www.w3.org/ns/prov#>
+PREFIX report: <https://w3id.org/force/compliance-report#>
+
+SELECT ?activity ?agent ?resource ?rule ?timestamp ?violationType
+WHERE {
+  ?activity a prov:Activity ;
+            prov:wasAssociatedWith ?agent ;
+            report:accessedResource ?resource ;
+            prov:startedAtTime ?timestamp ;
+            report:rule ?rule ;
+            report:deonticState report:Violated .
+  OPTIONAL {
+    ?activity report:hasViolationBundle ?vb .
+    ?vb prov:hadMember ?v .
+    ?v report:violationType ?violationType .
+  }
+}
+ORDER BY DESC(?timestamp)

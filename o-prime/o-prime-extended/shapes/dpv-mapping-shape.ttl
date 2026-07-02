@@ -1,0 +1,127 @@
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix dpv:    <https://w3id.org/dpv#> .
+@prefix schema: <https://schema.org/> .
+@prefix dct:    <http://purl.org/dc/terms/> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex:     <https://example.org/> .
+@prefix foaf:   <http://xmlns.com/foaf/0.1/> .
+
+
+# ############################################################################
+# DPV MAPPING LAYER
+# ############################################################################
+# This file maps application-level predicates (Schema.org) to DPV privacy
+# categories. It is used by the O-Prime gateway to classify accessed data
+# during request processing. All entries are validated against the
+# DPVMappingShape (SHACL) to ensure required classification fields are present.
+#
+# Coverage:
+#   - Section A: Health-record scenario (bloodType, identifier, MedicalRecord)
+#   - Section B: Student-record scenario (Person, name, email, birthDate,
+#     birthPlace, parent)
+# ############################################################################
+
+
+# ############################################################################
+# SECTION A: HEALTH-RECORD SCENARIO
+# ############################################################################
+
+# --------------------------------------------------------------------------
+# A.1 Blood Type (Special Category - Health Data)
+# --------------------------------------------------------------------------
+schema:bloodType a dpv:PersonalData ;
+    dct:description "Blood type health attribute"@en ;
+    dpv:hasPersonalData dpv:HealthData ;
+    dpv:hasDataCategory dpv:SpecialCategoryPersonalData ;
+    dpv:hasSector dpv:Health .
+
+# --------------------------------------------------------------------------
+# A.2 Identifier (Sensitive - Identifying Data)
+# --------------------------------------------------------------------------
+schema:identifier a dpv:PersonalData ;
+    dct:description "Unique identifier assigned to a person"@en ;
+    dpv:hasPersonalData dpv:IdentifyingPersonalData ;
+    dpv:hasDataCategory dpv:SensitivePersonalData ;
+    dpv:hasSector dpv:IdentityManagement .
+
+# --------------------------------------------------------------------------
+# A.3 Medical Record (Special Category - Health Data)
+# --------------------------------------------------------------------------
+schema:MedicalRecord a dpv:PersonalData ;
+    dct:description "Medical record containing health-related information"@en ;
+    dpv:hasPersonalData dpv:HealthData ;
+    dpv:hasDataCategory dpv:SpecialCategoryPersonalData ;
+    dpv:hasSector dpv:Health .
+
+
+# ############################################################################
+# SECTION B: UNIVERSITY / STUDENT-RECORD SCENARIO
+# ############################################################################
+
+# --------------------------------------------------------------------------
+# B.1 Person (Student Academic Record - Special Category)
+# --------------------------------------------------------------------------
+schema:Person a dpv:PersonalData ;
+    dct:description "Student academic record containing personal and academic information"@en ;
+    dpv:hasPersonalData dpv:AcademicRecord ;
+    dpv:hasDataCategory dpv:SpecialCategoryPersonalData ;
+    dpv:hasSector dpv:Education .
+
+# --------------------------------------------------------------------------
+# B.2 Name (Identifying Personal Data)
+# --------------------------------------------------------------------------
+schema:name a dpv:PersonalData ;
+    dct:description "Full name of the person"@en ;
+    dpv:hasPersonalData dpv:IdentifyingPersonalData ;
+    dpv:hasDataCategory dpv:PersonalData ;
+    dpv:hasSector dpv:IdentityManagement .
+
+# --------------------------------------------------------------------------
+# B.3 Email (Contact Personal Data)
+# --------------------------------------------------------------------------
+schema:email a dpv:PersonalData ;
+    dct:description "Email address of the person"@en ;
+    dpv:hasPersonalData dpv:ContactPersonalData ;
+    dpv:hasDataCategory dpv:PersonalData ;
+    dpv:hasSector dpv:Communication .
+
+# --------------------------------------------------------------------------
+# B.4 Birth Date (Special Category - Demographic Data)
+# --------------------------------------------------------------------------
+schema:birthDate a dpv:PersonalData ;
+    dct:description "Date of birth of the person"@en ;
+    dpv:hasPersonalData dpv:DemographicPersonalData ;
+    dpv:hasDataCategory dpv:SpecialCategoryPersonalData ;
+    dpv:hasSector dpv:IdentityManagement .
+
+# --------------------------------------------------------------------------
+# B.5 Birth Place (Location Personal Data)
+# --------------------------------------------------------------------------
+schema:birthPlace a dpv:PersonalData ;
+    dct:description "Place of birth of the person"@en ;
+    dpv:hasPersonalData dpv:LocationPersonalData ;
+    dpv:hasDataCategory dpv:PersonalData ;
+    dpv:hasSector dpv:IdentityManagement .
+
+# --------------------------------------------------------------------------
+# B.6 Parent (Family Personal Data)
+# --------------------------------------------------------------------------
+schema:parent a dpv:PersonalData ;
+    dct:description "Parent or guardian information"@en ;
+    dpv:hasPersonalData dpv:FamilyPersonalData ;
+    dpv:hasDataCategory dpv:PersonalData ;
+    dpv:hasSector dpv:Family .
+
+
+# ############################################################################
+# DATA SUBJECT DEFINITIONS (shared across scenarios)
+# ############################################################################
+
+ex:pod-owner a foaf:Agent ;
+    dct:title "Pod Owner (Health-Record Scenario)" ;
+    dct:description "Data subject in the health-record demonstration scenario" .
+
+ex:student-owner a foaf:Agent ;
+    dct:title "Student Pod Owner (University Scenario)" ;
+    dct:description "Data subject in the university/student-record demonstration scenario" .

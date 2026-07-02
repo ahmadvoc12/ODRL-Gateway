@@ -1,0 +1,19 @@
+# CQ11: Which apps accessed personal data for marketing purposes?
+PREFIX prov:   <http://www.w3.org/ns/prov#>
+PREFIX report: <https://w3id.org/force/compliance-report#>
+PREFIX xsd:    <http://www.w3.org/2001/XMLSchema#>
+
+SELECT DISTINCT ?agent ?timestamp ?resource ?trustSource
+WHERE {
+  ?activity a prov:Activity ;
+            prov:wasAssociatedWith ?agent ;
+            prov:startedAtTime ?timestamp ;
+            prov:used ?resource ;
+            report:hasViolationBundle ?vb .
+  ?vb prov:hadMember ?v .
+  ?v report:hasConstraintViolation ?cv .
+  ?cv report:violatedLeftOperand "odrl:purpose" ;
+      report:declaredValue "dpv:Marketing" .
+  OPTIONAL { ?cv report:claimTrustSource ?trustSource }
+}
+ORDER BY DESC(?timestamp)

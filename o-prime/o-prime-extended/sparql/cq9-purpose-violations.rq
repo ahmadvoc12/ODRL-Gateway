@@ -1,0 +1,17 @@
+# CQ9: Which accesses violated a purpose constraint?
+PREFIX prov: <http://www.w3.org/ns/prov#>
+PREFIX report: <https://w3id.org/force/compliance-report#>
+
+SELECT ?activity ?agent ?declaredPurpose ?requiredPurpose ?timestamp
+WHERE {
+  ?activity a prov:Activity ;
+            prov:wasAssociatedWith ?agent ;
+            prov:startedAtTime ?timestamp ;
+            report:hasViolationBundle ?vb .
+  ?vb prov:hadMember ?v .
+  ?v report:hasConstraintViolation ?cv .
+  ?cv report:violatedLeftOperand "odrl:purpose" ;
+      report:requiredValue ?requiredPurpose ;
+      report:declaredValue ?declaredPurpose .
+}
+ORDER BY DESC(?timestamp)

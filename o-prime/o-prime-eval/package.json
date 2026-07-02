@@ -1,0 +1,65 @@
+{
+  "name": "o-prime-eval",
+  "version": "1.0.0",
+  "description": "O-Prime: ODRL-based Privacy Monitoring Framework for Decentralized Solid Environments - Evaluation Package",
+  "main": "index.js",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node gateway.mjs",
+    "start:dev": "nodemon gateway.mjs",
+    "start:css": "community-solid-server -c config/file.json -f ./.data",
+    "eval:latency": "node evaluation/latency-measurement.mjs",
+    "eval:overhead": "node evaluation/overhead-breakdown.mjs",
+    "eval:policy": "node evaluation/policy-eval.mjs",
+    "eval:shacl": "python evaluation/shacl-validate-real.py",
+    "eval:sparql": "node evaluation/sparql-queries.mjs",
+    "eval:all": "npm run eval:latency && npm run eval:overhead && npm run eval:policy && npm run eval:shacl && npm run eval:sparql",
+    "benchmark": "autocannon -c 1 -d 30 --renderStatusCodes http://localhost:3000/",
+    "test": "node --test evaluation/*.test.mjs",
+    "lint": "eslint . --ext .mjs,.js",
+    "clean": "rm -rf .data logs/*.log evaluation/results/*.json"
+  },
+  "keywords": [
+    "solid",
+    "odrl",
+    "dpv",
+    "prov-o",
+    "privacy",
+    "monitoring",
+    "audit",
+    "decentralized",
+    "linked-data",
+    "semantic-web"
+  ],
+  "author": "Ahmad Cahyono Adi <ahmadcahyonoadi@mail.ugm.ac.id>",
+  "contributors": [
+    "Uha Isnaini <isnainiuha@ugm.ac.id>",
+    "Muhammad Hanif <muhammadhanif2005@mail.ugm.ac.id>",
+    "Kabul Kurniawan <kabul.kurniawan@ugm.ac.id>",
+    "Andreas Ekelhart <aekelhart@sba-research.org>"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ahmadvoc12/ODRL-Gateway.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ahmadvoc12/ODRL-Gateway/issues"
+  },
+  "homepage": "https://github.com/ahmadvoc12/ODRL-Gateway/tree/main/evaluation-package",
+  "dependencies": {
+    "@solid/community-server": "^7.1.7",
+    "n3": "^1.26.0",
+    "rdf-validate-shacl": "^0.4.5",
+    "@rdfjs/types": "^1.1.2",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "autocannon": "^8.0.0",
+    "nodemon": "^3.0.1",
+    "eslint": "^8.57.0"
+  }
+}

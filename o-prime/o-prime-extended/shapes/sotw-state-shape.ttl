@@ -1,0 +1,136 @@
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix sotw:   <https://w3id.org/force/sotw#> .
+@prefix odrl:   <http://www.w3.org/ns/odrl/2/> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex:     <https://example.org/> .
+@prefix dct:    <http://purl.org/dc/terms/> .
+
+
+# ############################################################################
+# SHACL SHAPES FOR STATE OF THE WORLD (SoTW)
+# ############################################################################
+# These shapes validate the State of the World (SoTW) graph used by O-Prime
+# for context-aware policy evaluation. The SoTW tracks runtime state such as
+# access counts per field and action type, current time, and location context.
+#
+# Coverage:
+#   - SoTW root structure (currentTime, currentLocation)
+#   - Count entries with multi-action tracking (countValue, target, actionType)
+#   - Non-negative count values
+#   - Action type enumeration (ex:read, ex:create, ex:update, ex:delete)
+# ############################################################################
+
+
+# ============================================================================
+# 1. SoTW ROOT SHAPE
+# ============================================================================
+# Validates the root SoTW structure with temporal and location context.
+# The currentTime is used for temporal constraint evaluation (Tier 1).
+# ============================================================================
+ex:SoTWShape a sh:NodeShape ;
+    sh:targetClass sotw:SotW ;
+    sh:name "State of the World Root Shape" ;
+    sh:description "Validates O-Prime SoTW state graph structure with temporal and location context." ;
+
+    # Required: currentTime (used for temporal constraint evaluation)
+    sh:property [
+        sh:path sotw:currentTime ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:dateTime ;
+        sh:name "currentTime" ;
+        sh:message "SoTW must have exactly one sotw:currentTime (xsd:dateTime) for temporal constraint evaluation."
+    ] ;
+
+    # Optional: currentLocation (ISO 3166 country code IRI)
+    sh:property [
+        sh:path sotw:currentLocation ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:name "currentLocation" ;
+        sh:message "SoTW may have at most one sotw:currentLocation (ISO 3166 country code IRI)."
+    ] ;
+
+    # Optional: count entries (one or more)
+    sh:property [
+        sh:path sotw:count ;
+        sh:name "count" ;
+        sh:message "SoTW may have one or more sotw:count entries for usage tracking." ;
+        sh:nodeKind sh:BlankNodeOrIRI
+    ] .
+
+
+# ============================================================================
+# 2. SoTW COUNT SHAPE (Multi-Action Tracking)
+# ============================================================================
+# Validates individual count entries with multi-action tracking support.
+# Each count entry tracks usage for a specific field + action combination.
+# ============================================================================
+ex:SoTWCountShape a sh:NodeShape ;
+    sh:targetClass sotw:Count ;
+    sh:name "SoTW Count Entry Shape" ;
+    sh:description "Validates SoTW count entries with multi-action tracking (field + action type)." ;
+
+    # Required: countValue (non-negative integer)
+    sh:property [
+        sh:path sotw:countValue ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:integer ;
+        sh:minInclusive 0 ;
+        sh:name "countValue" ;
+        sh:message "Count entry must have exactly one non-negative integer sotw:countValue (>= 0)."
+    ] ;
+
+    # Required: target (the RDF predicate being tracked)
+    sh:property [
+        sh:path odrl:target ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:name "target" ;
+        sh:message "Count entry must reference exactly one target predicate via odrl:target (IRI)."
+    ] ;
+
+    # Required: actionType (the ODRL action being tracked)
+    sh:property [
+        sh:path sotw:actionType ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:in ( "ex:read" "ex:create" "ex:update" "ex:delete" "odrl:read" "odrl:write" "odrl:modify" "odrl:create" "odrl:delete" "odrl:use" ) ;
+        sh:name "actionType" ;
+        sh:message "Count entry must have exactly one sotw:actionType (e.g., ex:read, ex:create, ex:update, ex:delete)."
+    ] .
+
+
+# ============================================================================
+# 3. SoTW MULTI-ACTION CONSTRAINT SHAPE (Optional)
+# ============================================================================
+# Ensures that for a given target, there are no duplicate actionType entries.
+# This prevents double-counting when the same field+action is tracked multiple
+# times in a single SoTW snapshot.
+# ============================================================================
+ex:SoTWNoDuplicateActionShape a sh:NodeShape ;
+    sh:targetClass sotw:SotW ;
+    sh:name "SoTW No Duplicate Action Shape" ;
+    sh:description "Ensures no duplicate (target, actionType) combinations in SoTW counts." ;
+
+    # This is a complex constraint that would require SPARQL-based validation.
+    # For now, we rely on the gateway logic to prevent duplicates during updates.
+    # A future extension could add a sh:sparql constraint here.
+    sh:sparql [
+        sh:select """
+            PREFIX sotw: <https://w3id.org/force/sotw#>
+            PREFIX odrl: <http://www.w3.org/ns/odrl/2/>
+            SELECT $this (COUNT(?count) AS ?countCount)
+            WHERE {
+                $this sotw:count ?count .
+                ?count odrl:target ?target ;
+                       sotw:actionType ?action .
+            }
+            GROUP BY ?target ?action
+            HAVING (?countCount > 1)
+        """ ;
+        sh:message "SoTW must not have duplicate (target, actionType) combinations."
+    ] .

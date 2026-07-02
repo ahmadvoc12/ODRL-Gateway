@@ -1,0 +1,15 @@
+# CQ3: Which policy governed a specific access event?
+PREFIX prov: <http://www.w3.org/ns/prov#>
+PREFIX report: <https://w3id.org/force/compliance-report#>
+
+SELECT ?activity ?policy ?result ?targetAsset ?deonticState
+WHERE {
+  ?activity a prov:Activity ;
+            report:deonticState ?deonticState ;
+            report:hasPolicyBundle ?pb .
+  ?pb prov:hadMember ?eval .
+  ?eval report:evaluatedPolicy ?policy ;
+        report:evaluationResult ?result ;
+        report:targetAsset ?targetAsset .
+}
+ORDER BY ?activity
