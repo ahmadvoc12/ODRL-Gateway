@@ -9,12 +9,15 @@
  *      loader on the published .ttl policy files.
  *   2. SHACL conformance                  - a real SHACL reasoner (pyshacl)
  *      over the artifact package (evaluation/shacl-validate-real.py).
- *   3. SPARQL competency questions        - the 14 .rq files under sparql/.
+ *   3. SPARQL competency questions        - the 15 .rq files under sparql/.
  *
  * No engine logic is duplicated here; everything traces to one implementation.
+ *
+ * Auto-saves output to evaluation/master-eval-YYYYMMDD-HHMMSS.txt
+ *         for reproducibility and paper submission.
  */
 import { execFileSync } from 'child_process';
-import { readdirSync } from 'fs';
+import { readdirSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { scenarioTests, perfTest } from
@@ -24,6 +27,57 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const line = (c = '=') => console.log(c.repeat(80));
 const divider = (c = '─') => console.log(c.repeat(80));
 
+// ============================================================================
+// AUTO-SAVE OUTPUT TO FILE 
+// ============================================================================
+const TIMESTAMP = new Date().toISOString()
+  .replace(/[-:T]/g, '')
+  .slice(0, 15)
+  .replace(/(\d{8})(\d{6})/, '$1-$2');
+const OUTPUT_FILE = join(ROOT, 'evaluation', `master-eval-${TIMESTAMP}.txt`);
+const outputBuffer = [];
+const originalLog = console.log;
+
+// Override console.log to capture all output
+console.log = (...args) => {
+  const lineText = args
+    .map(a => {
+      if (typeof a === 'object' && a !== null) {
+        try { return JSON.stringify(a, null, 2); }
+        catch { return String(a); }
+      }
+      return String(a);
+    })
+    .join(' ');
+  outputBuffer.push(lineText);
+  originalLog.apply(console, args);  // Still print to terminal
+};
+
+// Save to file on process exit
+process.on('exit', () => {
+  try {
+    writeFileSync(OUTPUT_FILE, outputBuffer.join('\n'), 'utf-8');
+    originalLog(`\n💾 Output saved to: ${OUTPUT_FILE}`);
+  } catch (e) {
+    originalLog(`\n⚠️  Could not save output: ${e.message}`);
+  }
+});
+
+// Handle Ctrl+C gracefully
+process.on('SIGINT', () => {
+  originalLog('\n⚠️  Interrupted. Saving partial output...');
+  try {
+    writeFileSync(OUTPUT_FILE, outputBuffer.join('\n'), 'utf-8');
+    originalLog(`💾 Partial output saved to: ${OUTPUT_FILE}`);
+  } catch (e) {
+    originalLog(`⚠️  Could not save output: ${e.message}`);
+  }
+  process.exit(1);
+});
+
+// ============================================================================
+// MAIN EVALUATION
+// ============================================================================
 line();
 console.log('O-PRIME - MASTER EVALUATION (Journal of Web Semantics submission)');
 line();
@@ -45,7 +99,7 @@ console.log('    ' + Object.entries(byType)
   .map(([k, v]) => `${k} ${v.p}/${v.t}`).join(' | '));
 console.log(`    Scenario accuracy: ${sc.passed}/${sc.total} = ${sc.accuracy}%`);
 
-// ✅ UPDATED: Display ALL 6 tiers (1, 3, 5, 10, 50, 100 policies)
+// UPDATED: Display ALL 6 tiers (1, 3, 5, 10, 50, 100 policies)
 const perf = perfTest();
 console.log('\n    Engine latency (2000 evaluations per tier):');
 console.log('    ┌──────────┬──────────┬──────────┐');
@@ -72,7 +126,7 @@ let shaclSuccess = false;
 let shaclSummary = 'N/A';
 
 try {
-  // ✅ UPDATED: Capture both stdout and stderr for better error reporting
+  // UPDATED: Capture both stdout and stderr for better error reporting
   shaclOut = execFileSync('python3',
     [join(ROOT, 'evaluation/shacl-validate-real.py')],
     {
@@ -83,7 +137,7 @@ try {
   );
   shaclSuccess = true;
 
-  // ✅ UPDATED: Display full output with proper indentation
+  // UPDATED: Display full output with proper indentation
   const lines = shaclOut.trim().split('\n');
   for (const l of lines) {
     console.log('    ' + l);
@@ -95,7 +149,7 @@ try {
     shaclSummary = summaryLine.replace('TOTAL: ', '');
   }
 } catch (e) {
-  console.log('    ❌ SHACL validation failed:');
+  console.log('SHACL validation failed:');
 
   // ✅ UPDATED: Display detailed error information
   if (e.stdout) {
@@ -151,7 +205,7 @@ try {
     console.log('    ' + l);
   }
 } catch (e) {
-  console.log('    ❌ SPARQL validation failed:');
+  console.log(' SPARQL validation failed:');
   if (e.stdout) {
     const lines = e.stdout.trim().split('\n');
     for (const l of lines.slice(-15)) {
