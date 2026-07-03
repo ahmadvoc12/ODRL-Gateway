@@ -39,13 +39,13 @@ ARTIFACTS = [
     ("duty-policy",          "ODRL policies",      ROOT / "policies/duty-policy.ttl"),
 
     # --- PROV-O audit logs (health + student) ---
-    ("sample-access-log",    "PROV-O audit logs",  ROOT / "logs/sample-access-log.ttl"),
+    ("access-log",           "PROV-O audit logs",  ROOT / "logs/access-log.ttl"),
 
     # --- DPV mapping layer (health + student) ---
     ("dpv-mapping",          "DPV mapping layer",  ROOT / "dpv/dpv-mapping.ttl"),
 
     # --- State-of-the-World (health + student) ---
-    ("sample-sotw",          "State-of-the-World", ROOT / "sotw/sample-sotw.ttl"),
+    ("sotw",                 "State-of-the-World", ROOT / "sotw/sotw.ttl"),
 ]
 
 
@@ -72,7 +72,7 @@ def validate_artifact(data: Graph, shapes: Graph):
         violations = len(list(report_graph.subject_objects(SH.resultSeverity)))
         return conforms, violations, len(data)
     except Exception as e:
-        print(f"  ⚠️  Validation error: {e}", file=sys.stderr)
+        print(f"  ️  Validation error: {e}", file=sys.stderr)
         traceback.print_exc()
         return False, -1, len(data)
 
@@ -179,6 +179,21 @@ def main() -> int:
         print(f"{label:<30} {res:<6} {v_str:>5} {triples:>8}")
 
     # ========================================================================
+    # DEDUPLICATION ANALYSIS (NEW SECTION)
+    # ========================================================================
+    print("\nDeduplication analysis:")
+    print("-" * 55)
+    individual_sum = sum(triples for _, _, _, _, triples in rows)
+    combined_count = len(combined)
+    dedup_count = individual_sum - combined_count
+    dedup_rate = (dedup_count / individual_sum * 100) if individual_sum > 0 else 0
+
+    print(f"  Individual sum     : {individual_sum:>6} triples")
+    print(f"  Combined graph     : {combined_count:>6} triples")
+    print(f"  Deduplicated       : {dedup_count:>6} triples ({dedup_rate:.1f}%)")
+    print(f"  Cause              : Shared prefixes + RDF canonicalization")
+
+    # ========================================================================
     # SUMMARY
     # ========================================================================
     n_pass = sum(1 for r in rows if r[2])
@@ -198,6 +213,6 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except Exception as e:
-        print(f"\n❌ FATAL ERROR: {e}", file=sys.stderr)
+        print(f"\n FATAL ERROR: {e}", file=sys.stderr)
         traceback.print_exc()
         sys.exit(2)

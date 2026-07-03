@@ -1,0 +1,18 @@
+# CQ15c: Student data access summary per agent
+PREFIX prov:   <http://www.w3.org/ns/prov#>
+PREFIX report: <https://w3id.org/force/compliance-report#>
+
+SELECT ?agent
+       (COUNT(?activity) AS ?totalAccesses)
+       (SUM(?isFulfilled) AS ?fulfilledCount)
+       (COUNT(?activity) - SUM(?isFulfilled) AS ?violatedCount)
+WHERE {
+  ?activity a prov:Activity ;
+            prov:wasAssociatedWith ?agent ;
+            report:deonticState ?deonticState ;
+            report:accessedResource ?resource .
+  FILTER(CONTAINS(LCASE(STR(?resource)), "student") || CONTAINS(LCASE(STR(?resource)), "vercel.app"))
+  BIND(IF(?deonticState = report:Fulfilled, 1, 0) AS ?isFulfilled)
+}
+GROUP BY ?agent
+ORDER BY DESC(?totalAccesses)

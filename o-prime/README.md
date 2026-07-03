@@ -71,8 +71,8 @@ o-prime-extended/
   shapes/     *.ttl           # SHACL shapes (odrl-policy, prov-log, sotw-state, dpv-mapping)
   sparql/     cq1..cq10.rq    # competency questions
   dpv/        dpv-mapping.ttl # DPV predicate mapping
-  sotw/       sample-sotw.ttl # sample State-of-the-World graph
-  logs/       sample-access-log.ttl  # representative PROV-O audit log
+  sotw/       sotw.ttl # sample State-of-the-World graph
+  logs/       access-log.ttl  # representative PROV-O audit log
   evaluation/ master-evaluation.mjs, shacl-validate-real.py
 ```
 

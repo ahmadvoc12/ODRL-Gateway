@@ -132,6 +132,37 @@ console.log('\n[3] SPARQL COMPETENCY QUESTIONS');
 const cqs = readdirSync(join(ROOT, 'sparql')).filter((f) => f.endsWith('.rq'));
 console.log(`    ${cqs.length} competency questions: ${cqs.sort().join(', ')}`);
 
+
+// ============================================================================
+// 4. SPARQL QUERY VALIDATION (detailed)
+// ============================================================================
+console.log('\n[4] SPARQL QUERY VALIDATION - against access-log.ttl');
+try {
+  const sparqlOut = execFileSync('python3',
+    [join(ROOT, 'evaluation/validate-sparql.py')],
+    {
+      encoding: 'utf-8',
+      maxBuffer: 10 * 1024 * 1024,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }
+  );
+  const lines = sparqlOut.trim().split('\n');
+  for (const l of lines) {
+    console.log('    ' + l);
+  }
+} catch (e) {
+  console.log('    ❌ SPARQL validation failed:');
+  if (e.stdout) {
+    const lines = e.stdout.trim().split('\n');
+    for (const l of lines.slice(-15)) {
+      console.log('    ' + l);
+    }
+  }
+  if (e.stderr) {
+    console.log('    ' + e.stderr.split('\n').slice(0, 5).join('\n    '));
+  }
+}
+
 // ============================================================================
 // SUMMARY
 // ============================================================================

@@ -17,8 +17,8 @@ shapes/     odrl-policy-shape.ttl   # validates the ODRL policies
             dpv-mapping-shape.ttl   # validates the DPV predicate mapping
 sparql/     cq1..cq10.rq            # ten competency questions over the audit log
 dpv/        dpv-mapping.ttl         # predicate -> DPV category mapping
-sotw/       sample-sotw.ttl         # sample State-of-the-World graph
-logs/       sample-access-log.ttl   # representative PROV-O audit log
+sotw/       sotw.ttl         # sample State-of-the-World graph
+logs/       access-log.ttl   # representative PROV-O audit log
 evaluation/ master-evaluation.mjs   # unified engine + listing report
             shacl-validate-real.py  # pyshacl over every artifact in this package
 ```
